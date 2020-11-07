@@ -41,7 +41,6 @@ function Zip-CsvResults {
     [system.io.compression.zipfile]::CreateFromDirectory($outputPath, $zipFolder)
     return $zipFolder
 }
-
 function Is-Admin {
     $currentPrincipal = New-Object Security.Principal.WindowsPrincipal( [Security.Principal.WindowsIdentity]::GetCurrent() )
     if($currentPrincipal.IsInRole( [Security.Principal.WindowsBuiltInRole]::Administrator )) {
@@ -67,21 +66,32 @@ Write-host " "
     Write-host -ForegroundColor Cyan "==============================================================================="
     Write-host " "
 $scriptBlock1 = {
-Param($param1,$param2,$parm3)
-New-PSDrive -Name "SfMC" -PSProvider FileSystem -Root $param2 -Credential $param1 | Out-Null
-Copy-Item -Path SfMC:\Get-ExchangeServerDiscovery.ps1 -Destination "$env:ExchangeInstallPath\Logging"
-Set-Location $env:ExchangeInstallPath\Logging
-.\Get-ExchangeServerDiscovery.ps1 -Creds $param1 -destPath $param2
+Param($param1,$param2,$param3)
+New-PSDrive -Name "SfMC" -PSProvider FileSystem -Root $param3 -Credential $param1 | Out-Null
+Copy-Item -Path SfMC:\Get-ExchangeServerDiscovery.ps1 -Destination "$env:ExchangeInstallPath\Scripts"
+Set-Location $env:ExchangeInstallPath\Scripts
+.\Get-ExchangeServerDiscovery.ps1 -Creds $param1 -destPath $param2 -sPath $param3
 }
 $scriptBlock2 = {
-Param($param1,$param2,$parm3)
-New-PSDrive -Name "SfMC" -PSProvider FileSystem -Root $param2 -Credential $param1 | Out-Null
-Copy-Item -Path SfMC:\Get-ExchangeOrgDiscovery.ps1 -Destination "$env:ExchangeInstallPath\Logging"
-Set-Location $env:ExchangeInstallPath\Logging
-.\Get-ExchangeOrgDiscovery.ps1 -Creds $param1 -destPath $param2
+Param($param1,$param2,$param3)
+New-PSDrive -Name "SfMC" -PSProvider FileSystem -Root $param3 -Credential $param1 | Out-Null
+Copy-Item -Path SfMC:\Get-ExchangeOrgDiscovery.ps1 -Destination "$env:ExchangeInstallPath\Scripts"
+Set-Location $env:ExchangeInstallPath\Scripts
+.\Get-ExchangeOrgDiscovery.ps1 -Creds $param1 -destPath $param2 -sPath $param3
 }
+## Get the location for the scripts
+[string]$scriptPath = (Get-Location).Path
+## Convert the current location to a UNC path
+$scriptPath = $scriptPath.Replace(":","$")
+$scriptPath = "\\$env:COMPUTERNAME\$scriptPath"
 ## Determine the current location which will be used to store the results
-[string]$logPath = (Get-Location).Path
+Add-Type -AssemblyName System.Windows.Forms
+Write-Host "Select the location where to save the data." -ForegroundColor Yellow
+$folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+$folderBrowser.Description = "Select the location where to save the data"
+$folderBrowser.SelectedPath = "C:\"
+$folderPath = $folderBrowser.ShowDialog()
+[string]$logPath = $folderBrowser.SelectedPath
 ## Convert the current location to a UNC path
 $logPath = $logPath.Replace(":","$")
 $logPath = "\\$env:COMPUTERNAME\$logPath"
@@ -90,22 +100,22 @@ $domain = $env:USERDNSDOMAIN
 $UserName = $env:USERNAME
 $upn = "$UserName@$domain"
 $c = [System.Management.Automation.PSCredential](Get-Credential -UserName $upn.ToLower() -Message "Exchange admin credentials")
+## Set a timer
 $stopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
 $stopWatch.Start()
-## Get a list of servers for data collection
+## Connect to the Exchange server to get a list of servers for data collection
 Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ExchangeServer/Powershell -AllowRedirection -Authentication Kerberos -Name SfMC -WarningAction Ignore) -WarningAction Ignore -DisableNameChecking -AllowClobber | Out-Null
 if($DagName.Length -gt 0) { $servers = Get-DatabaseAvailabilityGroup $DagName | Select -ExpandProperty Servers }
 else {$servers = Get-ExchangeServer | Where { $_.ServerRole -ne "Edge"} | Select Name | ForEach-Object { $_.Name }}
 Write-host -ForegroundColor Yellow "Collecting data now, please be patient. This will take some time to complete!"
-#Start-Sleep -Seconds 2
-#$stopWatch.Elapsed.TotalSeconds
 Write-Host -ForegroundColor Yellow "Collecting Exchange organization settings..." -NoNewline
-Invoke-Command -ScriptBlock $scriptBlock2 -ComputerName $servers[0] -ArgumentList $c, $logPath -ErrorAction Ignore -AsJob | Out-Null #, $returnPath #-Credential $c -Authentication Kerberos
+## Collect Exchange organization settings
+Invoke-Command -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $c, $logPath, $scriptPath -ErrorAction Ignore -AsJob | Out-Null
+Write-Host "COMPLETE"
 Write-Host "Starting data collection on the Exchange servers..." -ForegroundColor Yellow -NoNewline
 ## Collect server specific data from all the servers
-Invoke-Command -ScriptBlock $scriptBlock1 -ComputerName $servers -ArgumentList $c, $logPath -ErrorAction Ignore -AsJob | Out-Null #, $returnPath #-Credential $c -Authentication Kerberos
+Invoke-Command -ScriptBlock $scriptBlock1 -ComputerName $servers -ArgumentList $c, $logPath, $scriptPath -ErrorAction Ignore -AsJob | Out-Null
 ## Collect Exchange orgnization settings from one server
-#Invoke-Command -ScriptBlock $scriptBlock2 -ComputerName $servers[0] -ArgumentList $c, $logPath
 Write-Host "COMPLETE"
 $stopWatch.Stop()
 $totalTime = $stopWatch.Elapsed.TotalSeconds
