@@ -24,12 +24,13 @@
   This script will run Get commands in your Exchange Management Shell to collect configuration data via PowerShell
 
 .NOTES
-  Should be run from Exchange Management Shell on Exchange 2010 CAS or 2013/2016 MBX, but could be run from mgmt remote powershell connected workstation
+  Exchange server specified should be the latest version in the environment
 #>
 param(
-    #[Parameter(Mandatory=$true)][System.Collections.ArrayList]$servers,
     [Parameter(Mandatory=$true)] [string]$ExchangeServer,
-    [Parameter(Mandatory=$false)] [string]$DagName
+    [Parameter(Mandatory=$false)] [string]$DagName,
+    [Parameter(Mandatory=$false)] [string]$OutputPath,
+    [Parameter(Mandatory=$false)] [string]$ScriptPath
 )
 function Zip-CsvResults {
 	#Change to the Script Location 
@@ -79,22 +80,30 @@ Copy-Item -Path SfMC:\Get-ExchangeOrgDiscovery.ps1 -Destination "$env:ExchangeIn
 Set-Location $env:ExchangeInstallPath\Scripts
 .\Get-ExchangeOrgDiscovery.ps1 -Creds $param1 -destPath $param2 -sPath $param3
 }
-## Get the location for the scripts
-[string]$scriptPath = (Get-Location).Path
+    ## Get the location for the scripts
+if($ScriptPath -like $null) {[string]$scriptPath = (Get-Location).Path}
+else{
+    if($ScriptPath.Substring($ScriptPath.Length-1,1) -eq "\") {$ScriptPath = $ScriptPath.Substring(0,$ScriptPath.Length-1)}
+}
 ## Convert the current location to a UNC path
-$scriptPath = $scriptPath.Replace(":","$")
-$scriptPath = "\\$env:COMPUTERNAME\$scriptPath"
+$ScriptPath = $ScriptPath.Replace(":","$")
+$ScriptPath = "\\$env:COMPUTERNAME\$ScriptPath"
 ## Determine the current location which will be used to store the results
-Add-Type -AssemblyName System.Windows.Forms
-Write-Host "Select the location where to save the data." -ForegroundColor Yellow
-$folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
-$folderBrowser.Description = "Select the location where to save the data"
-$folderBrowser.SelectedPath = "C:\"
-$folderPath = $folderBrowser.ShowDialog()
-[string]$logPath = $folderBrowser.SelectedPath
+if($OutputPath -like $null) {
+    Add-Type -AssemblyName System.Windows.Forms
+    Write-Host "Select the location where to save the data." -ForegroundColor Yellow
+    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+    $folderBrowser.Description = "Select the location where to save the data"
+    $folderBrowser.SelectedPath = "C:\"
+    $folderPath = $folderBrowser.ShowDialog()
+    [string]$OutputPath = $folderBrowser.SelectedPath
+}
+else {
+    if($OutputPath.Substring($OutputPath.Length-1,1) -eq "\") {$OutputPath = $OutputPath.Substring(0,$OutputPath.Length-1)}
+}
 ## Convert the current location to a UNC path
-$logPath = $logPath.Replace(":","$")
-$logPath = "\\$env:COMPUTERNAME\$logPath"
+$OutputPath = $OutputPath.Replace(":","$")
+$OutputPath = "\\$env:COMPUTERNAME\$OutputPath"
 ## Get the current user name and prompt for credentials
 $domain = $env:USERDNSDOMAIN
 $UserName = $env:USERNAME
@@ -110,11 +119,11 @@ else {$servers = Get-ExchangeServer | Where { $_.ServerRole -ne "Edge"} | Select
 Write-host -ForegroundColor Yellow "Collecting data now, please be patient. This will take some time to complete!"
 Write-Host -ForegroundColor Yellow "Collecting Exchange organization settings..." -NoNewline
 ## Collect Exchange organization settings
-Invoke-Command -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $c, $logPath, $scriptPath -ErrorAction Ignore -AsJob | Out-Null
+Invoke-Command -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $c, $OutputPath, $ScriptPath -ErrorAction Ignore -AsJob | Out-Null
 Write-Host "COMPLETE"
 Write-Host "Starting data collection on the Exchange servers..." -ForegroundColor Yellow -NoNewline
 ## Collect server specific data from all the servers
-Invoke-Command -ScriptBlock $scriptBlock1 -ComputerName $servers -ArgumentList $c, $logPath, $scriptPath -ErrorAction Ignore -AsJob | Out-Null
+Invoke-Command -ScriptBlock $scriptBlock1 -ComputerName $servers -ArgumentList $c, $OutputPath, $ScriptPath -ErrorAction Ignore -AsJob | Out-Null
 ## Collect Exchange orgnization settings from one server
 Write-Host "COMPLETE"
 $stopWatch.Stop()
