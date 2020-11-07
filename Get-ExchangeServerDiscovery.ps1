@@ -1,5 +1,6 @@
 ﻿param( [Parameter(Mandatory=$true)][System.Management.Automation.PSCredential]$creds,
-[string]$destPath
+[string]$destPath,
+[string]$sPath
 )
  function Zip-CsvResults {
 	## Zip up the data collection results
