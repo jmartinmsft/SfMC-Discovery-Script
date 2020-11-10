@@ -88,7 +88,7 @@ else{
 ## Convert the current location to a UNC path
 $ScriptPath = $ScriptPath.Replace(":","$")
 $ScriptPath = "\\$env:COMPUTERNAME\$ScriptPath"
-## Determine the current location which will be used to store the results
+# Determine the current location which will be used to store the results
 if($OutputPath -like $null) {
     Add-Type -AssemblyName System.Windows.Forms
     Write-Host "Select the location where to save the data." -ForegroundColor Yellow
@@ -109,23 +109,40 @@ $domain = $env:USERDNSDOMAIN
 $UserName = $env:USERNAME
 $upn = "$UserName@$domain"
 $c = [System.Management.Automation.PSCredential](Get-Credential -UserName $upn.ToLower() -Message "Exchange admin credentials")
+$servers = New-Object System.Collections.ArrayList
 ## Set a timer
 $stopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
 $stopWatch.Start()
 ## Connect to the Exchange server to get a list of servers for data collection
-Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ExchangeServer/Powershell -AllowRedirection -Authentication Kerberos -Name SfMC -WarningAction Ignore) -WarningAction Ignore -DisableNameChecking -AllowClobber | Out-Null
+Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ExchangeServer/Powershell -AllowRedirection -Authentication Kerberos -Name SfMC -WarningAction Ignore -Credential $c) -WarningAction Ignore -DisableNameChecking -AllowClobber | Out-Null
 if($DagName.Length -gt 0) { $servers = Get-DatabaseAvailabilityGroup $DagName | Select -ExpandProperty Servers }
-else {$servers = Get-ExchangeServer | Where { $_.ServerRole -ne "Edge"} | Select Name | ForEach-Object { $_.Name }}
+else {Get-ExchangeServer | Where { $_.ServerRole -ne "Edge"} | ForEach-Object { $servers.Add($_.Fqdn) | Out-Null }
+}
 Write-host -ForegroundColor Yellow "Collecting data now, please be patient. This will take some time to complete!"
 Write-Host -ForegroundColor Yellow "Collecting Exchange organization settings..." -NoNewline
 ## Collect Exchange organization settings
-Invoke-Command -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $c, $OutputPath, $ScriptPath -ErrorAction Ignore -AsJob | Out-Null
+Invoke-Command -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $c, $OutputPath, $ScriptPath -InDisconnectedSession -Credential $c | Out-Null
 Write-Host "COMPLETE"
-Write-Host "Starting data collection on the Exchange servers..." -ForegroundColor Yellow -NoNewline
+Write-Host "Starting data collection on the Exchange servers..." -ForegroundColor Yellow 
 ## Collect server specific data from all the servers
-Invoke-Command -ScriptBlock $scriptBlock1 -ComputerName $servers -ArgumentList $c, $OutputPath, $ScriptPath -ErrorAction Ignore -AsJob | Out-Null
-## Collect Exchange orgnization settings from one server
-Write-Host "COMPLETE"
+Invoke-Command -ScriptBlock $scriptBlock1 -ComputerName $servers -ArgumentList $c, $OutputPath, $ScriptPath -InDisconnectedSession -Credential $c | Out-Null
+$AllResultsUploaded = $false
+while($AllResultsUploaded -eq $false) {
+    Get-ChildItem "$OutputPath\*.zip" | Select Name | ForEach-Object {
+        foreach($s in $servers) {
+            [string]$server = $s.Substring(0, $s.IndexOf("."))
+            if($_.Name -like "$server*") {
+                Write-Host "Results for $s have been received." -ForegroundColor Cyan
+                $servers.Remove($s) | Out-Null
+                break
+            }
+        }
+        if($servers.Count -eq 0) {$AllResultsUploaded = $true}
+    }
+}
+Write-Host "All results have been received." -ForegroundColor Yellow
+Write-Host " "
+Write-Host " "
 $stopWatch.Stop()
 $totalTime = $stopWatch.Elapsed.TotalSeconds
 Write-host " "
