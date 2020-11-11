@@ -28,6 +28,7 @@
 #>
 param(
     [Parameter(Mandatory=$true)] [string]$ExchangeServer,
+    [Parameter(Mandatory=$false)] [string]$UserName,
     [Parameter(Mandatory=$false)] [string]$DagName,
     [Parameter(Mandatory=$false)] [string]$OutputPath,
     [Parameter(Mandatory=$false)] [string]$ScriptPath
@@ -105,10 +106,12 @@ else {
 $OutputPath = $OutputPath.Replace(":","$")
 $OutputPath = "\\$env:COMPUTERNAME\$OutputPath"
 ## Get the current user name and prompt for credentials
-$domain = $env:USERDNSDOMAIN
-$UserName = $env:USERNAME
-$upn = "$UserName@$domain"
-$c = [System.Management.Automation.PSCredential](Get-Credential -UserName $upn.ToLower() -Message "Exchange admin credentials")
+if($UserName -like $null) {
+    $domain = $env:USERDNSDOMAIN
+    $UserName = $env:USERNAME
+    $UserName = "$UserName@$domain"
+}
+$c = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials")
 $servers = New-Object System.Collections.ArrayList
 ## Set a timer
 $stopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
