@@ -54,7 +54,7 @@ function Is-Admin {
 }
 Clear-Host
 if(-not (Is-Admin)) {
-	Write-host;Write-Warning "The SfMC-Exchange-Discovery-1.ps1 script needs to be executed in elevated mode. Please start PowerShell 'as Administrator' and try again." 
+	Write-host;Write-Warning "The SfMC-Exchange-Discovery.ps1 script needs to be executed in elevated mode. Please start PowerShell 'as Administrator' and try again." 
 	Write-host;Start-Sleep -Seconds 2;
 	exit
 }
@@ -81,14 +81,11 @@ Copy-Item -Path SfMC:\Get-ExchangeOrgDiscovery.ps1 -Destination "$env:ExchangeIn
 Set-Location $env:ExchangeInstallPath\Scripts
 .\Get-ExchangeOrgDiscovery.ps1 -Creds $param1 -destPath $param2 -sPath $param3
 }
-    ## Get the location for the scripts
+## Get the location for the scripts
 if($ScriptPath -like $null) {[string]$scriptPath = (Get-Location).Path}
 else{
     if($ScriptPath.Substring($ScriptPath.Length-1,1) -eq "\") {$ScriptPath = $ScriptPath.Substring(0,$ScriptPath.Length-1)}
 }
-## Convert the current location to a UNC path
-$ScriptPath = $ScriptPath.Replace(":","$")
-$ScriptPath = "\\$env:COMPUTERNAME\$ScriptPath"
 # Determine the current location which will be used to store the results
 if($OutputPath -like $null) {
     Add-Type -AssemblyName System.Windows.Forms
@@ -102,33 +99,36 @@ if($OutputPath -like $null) {
 else {
     if($OutputPath.Substring($OutputPath.Length-1,1) -eq "\") {$OutputPath = $OutputPath.Substring(0,$OutputPath.Length-1)}
 }
-## Convert the current location to a UNC path
-$OutputPath = $OutputPath.Replace(":","$")
-$OutputPath = "\\$env:COMPUTERNAME\$OutputPath"
 ## Get the current user name and prompt for credentials
 if($UserName -like $null) {
     $domain = $env:USERDNSDOMAIN
     $UserName = $env:USERNAME
     $UserName = "$UserName@$domain"
 }
-$c = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials")
+$creds = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials")
+## Create temporary file shares to save the results
+New-SmbShare -Name SfMCOutput -Path $OutputPath -FullAccess $creds.UserName | Out-Null
+New-SmbShare -Name SfMCScript -Path $ScriptPath -FullAccess $creds.UserName | Out-Null
+## Update variable values with the new share values
+$OutputPath = "\\$env:COMPUTERNAME\SfMCOutput"
+$ScriptPath = "\\$env:COMPUTERNAME\SfMCScript"
+## Create an array for the list of Exchange servers
 $servers = New-Object System.Collections.ArrayList
 ## Set a timer
 $stopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
 $stopWatch.Start()
 ## Connect to the Exchange server to get a list of servers for data collection
-Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ExchangeServer/Powershell -AllowRedirection -Authentication Kerberos -Name SfMC -WarningAction Ignore -Credential $c) -WarningAction Ignore -DisableNameChecking -AllowClobber | Out-Null
-if($DagName.Length -gt 0) { $servers = Get-DatabaseAvailabilityGroup $DagName | Select -ExpandProperty Servers }
-else {Get-ExchangeServer | Where { $_.ServerRole -ne "Edge"} | ForEach-Object { $servers.Add($_.Fqdn) | Out-Null }
-}
+Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ExchangeServer/Powershell -AllowRedirection -Authentication Kerberos -Name SfMC -WarningAction Ignore -Credential $creds) -WarningAction Ignore -DisableNameChecking -AllowClobber | Out-Null
+if($DagName.Length -gt 0) { Get-DatabaseAvailabilityGroup $DagName | Select -ExpandProperty Servers | ForEach-Object { $servers.Add((Get-ExchangeServer $_ ).Fqdn) | Out-Null}}
+else {Get-ExchangeServer | Where { $_.ServerRole -ne "Edge"} | ForEach-Object { $servers.Add($_.Fqdn) | Out-Null } }
 Write-host -ForegroundColor Yellow "Collecting data now, please be patient. This will take some time to complete!"
 Write-Host -ForegroundColor Yellow "Collecting Exchange organization settings..." -NoNewline
 ## Collect Exchange organization settings
-Invoke-Command -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $c, $OutputPath, $ScriptPath -InDisconnectedSession -Credential $c | Out-Null
+Invoke-Command -Credential $creds -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $creds, $OutputPath, $ScriptPath -InDisconnectedSession  | Out-Null
 Write-Host "COMPLETE"
 Write-Host "Starting data collection on the Exchange servers..." -ForegroundColor Yellow 
 ## Collect server specific data from all the servers
-Invoke-Command -ScriptBlock $scriptBlock1 -ComputerName $servers -ArgumentList $c, $OutputPath, $ScriptPath -InDisconnectedSession -Credential $c | Out-Null
+Invoke-Command -Credential $creds -ScriptBlock $scriptBlock1 -ComputerName $servers -ArgumentList $creds, $OutputPath, $ScriptPath -InDisconnectedSession  | Out-Null
 $AllResultsUploaded = $false
 while($AllResultsUploaded -eq $false) {
     Get-ChildItem "$OutputPath\*.zip" | Select Name | ForEach-Object {
@@ -156,3 +156,5 @@ Write-Host -ForegroundColor Cyan "    Please upload results to SfMC. - Thank you
 Write-host -ForegroundColor Cyan "==================================================="
 Write-host " "
 Remove-PSSession -Name SfMC
+Remove-SmbShare -Name SfMCOutput -Force -Confirm:$False
+Remove-SmbShare -Name SfMCScript -Force -Confirm:$False
