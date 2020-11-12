@@ -3,14 +3,40 @@
 [string]$sPath
 )
  function Zip-CsvResults {
+     param( [Parameter(Mandatory=$true)][System.Management.Automation.PSCredential]$Credentials,
+        [string]$Destination
+    )
 	## Zip up the data collection results
     Add-Type -AssemblyName System.IO.Compression.Filesystem 
-    $date1 = Get-Date -UFormat "%d%b%Y"
-    [string]$zipFolder = "$env:ExchangeInstallPath\Logging\SfMC Discovery\$ServerName-Settings-$date1.zip"
-    Remove-Item $zipFolder -Force -ErrorAction Ignore
-    Set-Location $outputPath
-    [system.io.compression.zipfile]::CreateFromDirectory($outputPath, $zipFolder)
-    return $zipFolder
+    $ts = Get-Date -f yyyyMMddHHmmss
+    [string]$zipFolder = "$env:ExchangeInstallPath\Logging\SfMC Discovery\$ServerName-Settings-$ts.zip"
+    Get-ChildItem "$env:ExchangeInstallPath\Logging\SfMC Discovery\*.zip" | Remove-Item -Force -ErrorAction Ignore
+    ## Attempt to zip the results
+    try {[System.IO.Compression.ZipFile]::CreateFromDirectory($outputPath, $zipFolder)}
+    catch {
+        $zipFile = [System.IO.Compression.ZipFile]::Open($zipFolder, 'create')
+        $zipFile.Dispose()
+        $zipFile = [System.IO.Compression.ZipFile]::Open($zipFolder, 'update')
+        $compressionLevel = [System.IO.Compression.CompressionLevel]::Fastest
+        Get-ChildItem -Path $outputPath | Select FullName | ForEach-Object {
+            try{ [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipFile, $_.FullName, (Split-Path $_.FullName -Leaf), $compressionLevel) | Out-Null 
+            }
+	        catch{Write-warning "failed to add"}
+        }
+        $zipFile.Dispose()
+    }
+    ## Send data back to collection system
+    New-PSDrive -Name "SfMC" -PSProvider FileSystem -Root $Destination -Credential $Credentials | Out-Null
+    $resultsSent = $false
+    [int]$retryAttempt = 0
+    while($resultsSent -eq $false) {
+        Copy-Item -Path $zipFolder -Destination "SfMC:\" -Force
+        if(Test-Path "SfMC:\$ServerName-Settings-$date1.zip") {$resultsSent = $true}
+        else {Start-Sleep -Seconds 3; $retryAttempt++}
+        if($retryAttempt -eq 4) { Write-Error -Message "Unable to move results" }
+    }
+    ## Clean up
+    Remove-PSDrive -Name "SfMC" -Force | Out-Null
 }
 $ServerName = $env:COMPUTERNAME
 ## Set the destination for the data collection output
@@ -25,8 +51,8 @@ Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -Connectio
 ## General information
 Get-ExchangeServer $ServerName -Status | Select-Object * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-ExchangeServer.csv" -NoTypeInformation
 Get-ExchangeCertificate -Server $ServerName -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-ExchangeCertificate.csv" -NoTypeInformation
-Get-Disk | ForEach-Object { Get-Partition -DiskNumber $_.Number | Select * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-Partition.csv" -NoTypeInformation}
-Get-Disk | Select * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-Disk.csv" -NoTypeInformation
+Get-Disk | where {$_.Number -notlike $null} | ForEach-Object { Get-Partition -DiskNumber $_.Number | Select * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-Partition.csv" -NoTypeInformation}
+Get-Disk | where {$_.Number -notlike $null} | Select * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-Disk.csv" -NoTypeInformation
 Get-EventLogLevel -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-EventLogLevel.csv" -NoTypeInformation
 Get-HealthReport * -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-HealthReport.csv" -NoTypeInformation
 Get-ServerComponentState $ServerName -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-ServerComponentState.csv" -NoTypeInformation
@@ -67,11 +93,6 @@ Get-Mailbox -Server $ServerName -WarningAction Ignore -Arbitration| Select-Objec
 ## AD settings
 Get-ADSite -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-AdSite.csv" -NoTypeInformation
 Get-AdSiteLink -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData | Export-Csv "$outputPath\$ServerName-AdSiteLink.csv" -NoTypeInformation
-## Send data back to collection system
-New-PSDrive -Name "SfMC" -PSProvider FileSystem -Root $destPath -Credential $creds | Out-Null
-Add-Type -AssemblyName System.IO.Compression.Filesystem 
-[string]$serverResults = Zip-CsvResults
-Move-Item -Path $serverResults -Destination "SfMC:\" -Force
+Zip-CsvResults -Destination $destPath -Credentials $creds
 ## Clean up
-Remove-PSDrive -Name "SfMC" -Force | Out-Null
 Remove-PSSession -Name SfMC -ErrorAction Ignore | Out-Null
