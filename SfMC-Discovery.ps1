@@ -33,6 +33,14 @@ param(
     [Parameter(Mandatory=$false)] [string]$OutputPath,
     [Parameter(Mandatory=$false)] [string]$ScriptPath
 )
+function Get-FolderPath {   
+    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+    $folderBrowser.Description = "Select the location"
+    $folderBrowser.SelectedPath = "C:\"
+    $folderPath = $folderBrowser.ShowDialog()
+    [string]$oPath = $folderBrowser.SelectedPath
+    return $oPath
+}
 function Zip-CsvResults {
 	#Change to the Script Location 
     Add-Type -AssemblyName System.IO.Compression.Filesystem 
@@ -82,22 +90,37 @@ Set-Location $env:ExchangeInstallPath\Scripts
 .\Get-ExchangeOrgDiscovery.ps1 -Creds $param1 -destPath $param2 -sPath $param3
 }
 ## Get the location for the scripts
-if($ScriptPath -like $null) {[string]$scriptPath = (Get-Location).Path}
-else{
-    if($ScriptPath.Substring($ScriptPath.Length-1,1) -eq "\") {$ScriptPath = $ScriptPath.Substring(0,$ScriptPath.Length-1)}
+Add-Type -AssemblyName System.Windows.Forms
+[boolean]$validPath = $false
+while($validPath -eq $false) {
+    if($ScriptPath -like $null) {[string]$scriptPath = (Get-Location).Path}
+    else{
+        if($ScriptPath.Substring($ScriptPath.Length-1,1) -eq "\") {$ScriptPath = $ScriptPath.Substring(0,$ScriptPath.Length-1)}
+    }
+    if(Test-Path -Path $ScriptPath) {$validPath = $true}
+    else {
+        Write-Warning "An invalid path to the scripts was provided. Please select the location."
+        Start-Sleep -Seconds 3
+        $ScriptPath = Get-FolderPath
+    }
 }
 # Determine the current location which will be used to store the results
-if($OutputPath -like $null) {
-    Add-Type -AssemblyName System.Windows.Forms
-    Write-Host "Select the location where to save the data." -ForegroundColor Yellow
-    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
-    $folderBrowser.Description = "Select the location where to save the data"
-    $folderBrowser.SelectedPath = "C:\"
-    $folderPath = $folderBrowser.ShowDialog()
-    [string]$OutputPath = $folderBrowser.SelectedPath
-}
-else {
-    if($OutputPath.Substring($OutputPath.Length-1,1) -eq "\") {$OutputPath = $OutputPath.Substring(0,$OutputPath.Length-1)}
+[boolean]$validPath = $false
+while($validPath -eq $false) {
+    if($OutputPath -like $null) {
+        Write-Host "Select the location where to save the data." -ForegroundColor Yellow
+        $OutputPath = Get-FolderPath
+    }
+    else {
+        if($OutputPath.Substring($OutputPath.Length-1,1) -eq "\") {$OutputPath = $OutputPath.Substring(0,$OutputPath.Length-1)}
+    }
+    if(Test-Path -Path $OutputPath) {$validPath = $true}
+    else {
+        Write-Warning "An invalid path for the output was provided. Please select the location."
+        Start-Sleep -Seconds 3
+        $OutputPath = Get-FolderPath
+    }
+
 }
 ## Get the current user name and prompt for credentials
 if($UserName -like $null) {
@@ -107,8 +130,16 @@ if($UserName -like $null) {
 }
 $creds = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials")
 ## Create temporary file shares to save the results
-New-SmbShare -Name SfMCOutput -Path $OutputPath -FullAccess $creds.UserName | Out-Null
-New-SmbShare -Name SfMCScript -Path $ScriptPath -FullAccess $creds.UserName | Out-Null
+try {New-SmbShare -Name SfMCOutput -Path $OutputPath -FullAccess $creds.UserName -ErrorAction Stop | Out-Null}
+catch {
+    Write-Warning "Unable to create the SfMCOutput share. Exiting script"
+    exit
+}
+try {New-SmbShare -Name SfMCScript -Path $ScriptPath -FullAccess $creds.UserName -ErrorAction Stop | Out-Null}
+catch {
+    Write-Warning "Unable to create the SfMCScript share. Exiting script"
+    exit
+}
 ## Update variable values with the new share values
 $OutputPath = "\\$env:COMPUTERNAME\SfMCOutput"
 $ScriptPath = "\\$env:COMPUTERNAME\SfMCScript"
@@ -118,7 +149,25 @@ $servers = New-Object System.Collections.ArrayList
 $stopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
 $stopWatch.Start()
 ## Connect to the Exchange server to get a list of servers for data collection
-Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ExchangeServer/Powershell -AllowRedirection -Authentication Kerberos -Name SfMC -WarningAction Ignore -Credential $creds) -WarningAction Ignore -DisableNameChecking -AllowClobber | Out-Null
+$isConnected = $false
+[int]$retryAttempt = 0
+while($isConnected -eq $false) {
+    try {Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ExchangeServer/Powershell -AllowRedirection -Authentication Kerberos -Name SfMC -WarningAction Ignore -Credential $creds -ErrorAction Ignore) -WarningAction Ignore -DisableNameChecking -AllowClobber -ErrorAction Stop | Out-Null}
+    catch {
+        Write-Warning "Unable to create a remote PowerShell session with $ExchangeServer."
+        Start-Sleep -Seconds 2
+        $ExchangeServer = Read-Host "Please enter the FQDN of another Exchange Server: "
+    }
+    try{$testServer = Get-ExchangeServer $ExchangeServer -ErrorAction Ignore}
+    catch{$retryAttempt++}
+    if($testServer -like $null) {
+        if($retryAttempt -eq 4) {
+            Write-Warning "Maximum number of attempts has been reached. Check credentials and try again. Exiting script."
+            exit
+        }
+    }
+    else{$isConnected = $true}
+}
 if($DagName.Length -gt 0) { Get-DatabaseAvailabilityGroup $DagName | Select -ExpandProperty Servers | ForEach-Object { $servers.Add((Get-ExchangeServer $_ ).Fqdn) | Out-Null}}
 else {Get-ExchangeServer | Where { $_.ServerRole -ne "Edge"} | ForEach-Object { $servers.Add($_.Fqdn) | Out-Null } }
 Write-host -ForegroundColor Yellow "Collecting data now, please be patient. This will take some time to complete!"
