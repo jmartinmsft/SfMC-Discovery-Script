@@ -34,6 +34,12 @@ param(
     [Parameter(Mandatory=$false)] [string]$OutputPath,
     [Parameter(Mandatory=$false)] [string]$ScriptPath
 )
+function Test-ADAuthentication {
+    $UserName = $creds.UserName
+    $UserName = $UserName.Substring(0, $UserName.IndexOf("@"))
+    $Password = $creds.GetNetworkCredential().Password
+    (New-Object DirectoryServices.DirectoryEntry "",$username,$password).PsBase.Name -ne $null
+}
 function Start-Cleanup {
     Remove-PSSession -Name SfMC -ErrorAction Ignore
     Remove-SmbShare -Name SfMCOutput$ -Force -Confirm:$False -ErrorAction Ignore
@@ -139,7 +145,20 @@ if($UserName -like $null) {
     $UserName = $env:USERNAME
     $UserName = "$UserName@$domain"
 }
-$creds = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials")
+$validCreds = $false
+[int]$credAttempt = 0
+while($validCreds -eq $false) {
+    $creds = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials")
+    $validCreds =  Test-ADAuthentication -username $UserName -password $Password -root $Root
+    if($validCreds -eq $false) {
+        Write-Warning "Unable to validate your credentials. Please try again."
+        $credAttempt++
+    }
+    if($credAttempt -eq 3) {
+        Write-Warning "Too many credential failures. Exiting script."
+        exit
+    }
+}
 ## Create temporary file shares to save the results
 try {New-SmbShare -Name SfMCOutput$ -Path $OutputPath -FullAccess $creds.UserName -Description "Temporary share for SfMC Discovery" -ErrorAction Stop | Out-Null}
 catch {
