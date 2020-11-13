@@ -1,20 +1,62 @@
-﻿## Work with discovery data
+﻿param(
+    [Parameter(Mandatory=$false)] [string]$OutputPath
+)
+function Get-FolderPath {   
+    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+    $folderBrowser.Description = "Select the location"
+    $folderBrowser.SelectedPath = "C:\"
+    $folderPath = $folderBrowser.ShowDialog()
+    [string]$oPath = $folderBrowser.SelectedPath
+    return $oPath
+}
+## Work with discovery data
 Clear-Host
 Add-Type -AssemblyName System.Windows.Forms
-Write-Host "Select the location where the data resides." -ForegroundColor Yellow
-$folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
-$folderBrowser.Description = "Select the location where the data resides"
-$folderBrowser.SelectedPath = "C:\Hyper-V"
-$folderPath = $folderBrowser.ShowDialog()
-$dataPath = $folderBrowser.SelectedPath
-[string]$outputPath = $dataPath + "\Results"
-if(-not(Test-Path $outputPath)) { New-Item -Path $outputPath -ItemType Directory -Force -ErrorAction Ignore | Out-Null}
-Get-ChildItem -Path $dataPath -Filter *.zip | Select FullName,Name | ForEach-Object { 
+# Determine the current location which will be used to store the results
+[boolean]$validPath = $false
+while($validPath -eq $false) {
+    if($OutputPath -like $null) {
+        Write-Host "Select the location for the customer results." -ForegroundColor Yellow
+        $OutputPath = Get-FolderPath
+    }
+    else {
+        if($OutputPath.Substring($OutputPath.Length-1,1) -eq "\") {$OutputPath = $OutputPath.Substring(0,$OutputPath.Length-1)}
+    }
+    if(Test-Path -Path $OutputPath) {$validPath = $true}
+    else {
+        Write-Warning "An invalid path for the output was provided. Please select the location."
+        Start-Sleep -Seconds 3
+        $OutputPath = Get-FolderPath
+    }
+}
+## Set a timer
+Write-host " "
+Write-host -ForegroundColor Cyan "==============================================================================="
+Write-host " "
+Write-Host -ForegroundColor Cyan " The SfMC Email Discovery process is about to begin processing data. "
+Write-host -ForegroundColor Cyan " It will take some time to complete depending on the customer environment. "
+Write-host " "
+Write-host -ForegroundColor Cyan "==============================================================================="
+Write-host " "
+Start-Sleep -Seconds 3
+$stopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
+$stopWatch.Start()
+Get-ChildItem -Path $OutputPath -Filter *.zip | Select FullName,Name | ForEach-Object { 
     $serverName = $_.Name.Substring(0,$_.Name.IndexOf("-Settings"))
     $serverPath = $null
     $serverPath = "$outputPath\$serverName"
-    Expand-Archive -Path $_.FullName -DestinationPath $serverPath -ErrorAction Ignore
+    try{Expand-Archive -Path $_.FullName -DestinationPath $serverPath -ErrorAction Stop -Force}
+    catch{$zipName = $_.FullName
+        Write-Warning "Unable to extract $zipName."
+    }
 }
+Write-host " "
+Write-host -ForegroundColor Cyan "==============================================================================="
+Write-host " "
+Write-Host -ForegroundColor Cyan " The SfMC Email Discovery is merging the CSV data. "
+Write-host " "
+Write-host -ForegroundColor Cyan "==============================================================================="
+Write-host " "
 Get-ChildItem $outputPath -Filter *DagInfo.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Name | Export-Csv $outputPath\DAGinfo.csv -NoTypeInformation -Append
 Get-ChildItem $outputPath -Filter *AdSite.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Name | Export-Csv $outputPath\AdSite.csv -NoTypeInformation -Append
 Get-ChildItem $outputPath -Filter *AdSiteLink.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Name | Export-Csv $outputPath\AdSiteLink.csv -NoTypeInformation -Append
@@ -53,3 +95,11 @@ Get-ChildItem $outputPath -Filter *ServerMonitoringOverride.csv -Recurse | Selec
 Get-ChildItem $outputPath -Filter *MailboxTransportService.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\MailboxTransportService.csv -NoTypeInformation -Append
 Get-ChildItem $outputPath -Filter *FrontendTransportService.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\FrontendTransportService.csv -NoTypeInformation -Append
 Get-ChildItem $outputPath -Filter *DagConfiguration.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\DagConfiguration.csv -NoTypeInformation -Append
+$stopWatch.Stop()
+$totalTime = $stopWatch.Elapsed.TotalSeconds
+Write-host " "
+Write-host -ForegroundColor Cyan  "==================================================="
+Write-Host -ForegroundColor Cyan " SfMC Email Discovery data processing has finished!"
+Write-Host -ForegroundColor Cyan "          Total time: $($totalTime) seconds"
+Write-host -ForegroundColor Cyan "==================================================="
+Write-host " "
