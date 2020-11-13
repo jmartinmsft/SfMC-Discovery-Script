@@ -259,7 +259,7 @@ Write-Host " "
 $stopWatch.Stop()
 $totalTime = $stopWatch.Elapsed.TotalSeconds
 $timeStamp = Get-Date -Format yyyyMMddHHmmss
-Compress-Archive -Path $MonitorFolder -DestinationPath "$ScriptPath\DiscoveryResults-$timeStamp.zip"
+Compress-Archive -Path $MonitorFolder -DestinationPath ".\DiscoveryResults-$timeStamp.zip"
 Write-host " "
 Write-host -ForegroundColor Cyan  "==================================================="
 Write-Host -ForegroundColor Cyan " SfMC Email Discovery data collection has finished!"
