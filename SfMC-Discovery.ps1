@@ -53,16 +53,6 @@ function Get-FolderPath {
     [string]$oPath = $folderBrowser.SelectedPath
     return $oPath
 }
-function Zip-CsvResults {
-	#Change to the Script Location 
-    Add-Type -AssemblyName System.IO.Compression.Filesystem 
-    $date1 = Get-Date -UFormat "%d%b%Y"
-    [string]$zipFolder = "$env:ExchangeInstallPath\Logging\ExchangeOrgSettings-$date1.zip"
-    Remove-Item $zipFolder -Force -ErrorAction Ignore
-    Set-Location $outputPath
-    [system.io.compression.zipfile]::CreateFromDirectory($outputPath, $zipFolder)
-    return $zipFolder
-}
 function Is-Admin {
     $currentPrincipal = New-Object Security.Principal.WindowsPrincipal( [Security.Principal.WindowsIdentity]::GetCurrent() )
     if($currentPrincipal.IsInRole( [Security.Principal.WindowsBuiltInRole]::Administrator )) {
