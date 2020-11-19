@@ -5,8 +5,8 @@
 function Zip-CsvResults {
 	## Zip up the data collection results
     Add-Type -AssemblyName System.IO.Compression.Filesystem 
-    $date1 = Get-Date -UFormat "%d%b%Y"
-    [string]$zipFolder = "$env:ExchangeInstallPath\Logging\SfMC Discovery\$orgName-Settings-$date1.zip"
+    $ts = Get-Date -f yyyyMMddHHmmss
+    [string]$zipFolder = "$env:ExchangeInstallPath\Logging\SfMC Discovery\$orgName-Settings-$ts.zip"
     Remove-Item $zipFolder -Force -ErrorAction Ignore
     Set-Location $outputPath
     [system.io.compression.zipfile]::CreateFromDirectory($outputPath, $zipFolder)
@@ -19,7 +19,7 @@ if(!(Test-Path $outputPath)) {New-Item -Path $outputPath -ItemType Directory | O
 ## Remove any previous data
 else {Get-ChildItem -Path $outputPath | Remove-Item -Confirm:$False -Force }
 ## Create a remote PowerShell session with this server
-Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ServerName/Powershell -AllowRedirection -Authentication Kerberos -Credential $creds -Name SfMC2 -WarningAction Ignore) -WarningAction Ignore -DisableNameChecking | Out-Null
+#Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ServerName/Powershell -AllowRedirection -Authentication Kerberos -Credential $creds -Name SfMC2 -WarningAction Ignore) -WarningAction Ignore -DisableNameChecking | Out-Null
 [string]$orgName = (Get-OrganizationConfig).Name
 Set-ADServerSettings -ViewEntireForest:$True
 ## Data collection starts
