@@ -32,7 +32,10 @@ param(
     [Parameter(Mandatory=$false)] [string]$ServerName,
     [Parameter(Mandatory=$false)] [string]$DagName,
     [Parameter(Mandatory=$false)] [string]$OutputPath,
-    [Parameter(Mandatory=$false)] [string]$ScriptPath
+    [Parameter(Mandatory=$false)] [string]$ScriptPath,
+    [Parameter(Mandatory=$false)] [string]$ADSite,
+    [boolean]$OrgSettings=$true,
+    [boolean]$ServerSettings=$true
 )
 function Test-ADAuthentication {
     $UserName = $creds.UserName
@@ -83,6 +86,9 @@ $scriptBlock1 = {
 Param($param1,$param2,$param3)
 New-PSDrive -Name "SfMC" -PSProvider FileSystem -Root $param3 -Credential $param1 | Out-Null
 Copy-Item -Path SfMC:\Get-ExchangeServerDiscovery.ps1 -Destination "$env:ExchangeInstallPath\Scripts"
+Set-Location $env:ExchangeInstallPath
+Import-Module .\Bin\RemoteExchange.ps1
+Connect-ExchangeServer -UserName $param1 -Auto
 Set-Location $env:ExchangeInstallPath\Scripts
 .\Get-ExchangeServerDiscovery.ps1 -Creds $param1 -destPath $param2 -sPath $param3
 }
@@ -90,6 +96,9 @@ $scriptBlock2 = {
 Param($param1,$param2,$param3)
 New-PSDrive -Name "SfMC" -PSProvider FileSystem -Root $param3 -Credential $param1 | Out-Null
 Copy-Item -Path SfMC:\Get-ExchangeOrgDiscovery.ps1 -Destination "$env:ExchangeInstallPath\Scripts"
+Set-Location $env:ExchangeInstallPath
+Import-Module .\Bin\RemoteExchange.ps1
+Connect-ExchangeServer -UserName $param1 -Auto
 Set-Location $env:ExchangeInstallPath\Scripts
 .\Get-ExchangeOrgDiscovery.ps1 -Creds $param1 -destPath $param2 -sPath $param3
 }
@@ -210,25 +219,37 @@ else {
             exit
         }
     }
-    else {Get-ExchangeServer | Where { $_.ServerRole -ne "Edge"} | ForEach-Object { $servers.Add($_.Fqdn) | Out-Null } }
+    else {
+        if($ADSite -notlike $null) {
+            Get-ExchangeServer | Where {$_.Site -like "*$ADSite*" -and $_.ServerRole -ne "Edge"} | ForEach-Object { $servers.Add($_.Fqdn) | Out-Null}
+            if($servers.Count -eq 0){
+                Write-Warning "Unable to find any Exchange servers is the $ADSite site. Exiting script"
+                Start-Cleanup
+                exit
+            }
+        }
+        else {Get-ExchangeServer | Where { $_.ServerRole -ne "Edge"} | ForEach-Object { $servers.Add($_.Fqdn) | Out-Null } }
+    }
 }
 Write-host -ForegroundColor Yellow "Collecting data now, please be patient. This will take some time to complete!"
-Write-Host -ForegroundColor Yellow "Collecting Exchange organization settings..." -NoNewline
 ## Collect Exchange organization settings
-$Error.Clear()
-try {Invoke-Command -Credential $creds -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $creds, $OutputPath, $ScriptPath -InDisconnectedSession -ErrorAction Stop | Out-Null}
-catch {
-    Write-Host "FAILED"
-    Write-Warning "Unable to collect Exchange organization settings."
+if($OrgSettings) {
+    Write-Host -ForegroundColor Yellow "Collecting Exchange organization settings..." -NoNewline
+    try {Invoke-Command -Credential $creds -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $creds, $OutputPath, $ScriptPath -InDisconnectedSession -ErrorAction Stop | Out-Null}
+    catch {
+        Write-Host "FAILED"
+        Write-Warning "Unable to collect Exchange organization settings."
+    }
+    Write-Host "COMPLETE"
 }
-Write-Host "COMPLETE"
+if($ServerSettings) {
 Write-Host "Starting data collection on the Exchange servers..." -ForegroundColor Yellow 
 ## Collect server specific data from all the servers
 $failedServers = New-Object System.Collections.ArrayList
 foreach($s in $servers) {
     $Error.Clear()
     Write-Host "Attempt to collect data from $s..." -ForegroundColor Cyan
-    try{Invoke-Command -Credential $creds -ScriptBlock $scriptBlock1 -ComputerName $s -ArgumentList $creds, $OutputPath, $ScriptPath -InDisconnectedSession -ErrorAction Stop | Out-Null}
+    try{Invoke-Command -Credential $creds -ScriptBlock $scriptBlock1 -ComputerName $s -ArgumentList $creds, $OutputPath, $ScriptPath -InDisconnectedSession -ErrorAction Stop| Out-Null}
     catch{
         Write-Warning "Unable to connect to $s to collect data."
         $failedServers.Add($s) | Out-Null
@@ -264,6 +285,27 @@ while($AllResultsUploaded -eq $false) {
 if($EarlyExit -eq 1) {Write-Host "Not all results have been received." -ForegroundColor Yellow}
 else{Write-Host "All results have been received." -ForegroundColor Yellow}
 Write-Host " "
+}
+$EarlyExit = 0
+if($OrgSettings) {
+    $orgResultsIn = $false
+    [string]$orgName = (Get-OrganizationConfig).Name
+    while($orgResultsIn -eq $false) {
+        Get-ChildItem "$MonitorFolder\*.zip" -ErrorAction Ignore| Select Name | ForEach-Object {
+            if($_.Name -like "*$orgName*") {
+                $orgResultsIn = $true
+            }
+        }
+        if($monitorWatch.Elapsed.TotalMinutes -ge 5) {
+            Write-Warning "Delay detected in receiving results."
+            $orgResultsIn = $true
+            [int]$EarlyExit = 1
+        }
+    }
+    if($EarlyExit -eq 1) {Write-Host "Not all results have been received." -ForegroundColor Yellow}
+    else{Write-Host "All results have been received." -ForegroundColor Yellow}
+    Write-Host " "
+}
 Write-Host " "
 $stopWatch.Stop()
 $totalTime = $stopWatch.Elapsed.TotalSeconds
@@ -277,3 +319,4 @@ Write-Host -ForegroundColor Cyan "    Please upload results to SfMC. - Thank you
 Write-host -ForegroundColor Cyan "==================================================="
 Write-host " "
 Start-Cleanup
+$failedServers | Out-File "$MonitorFolder\FailedServers.txt"
