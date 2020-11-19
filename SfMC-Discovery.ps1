@@ -169,6 +169,7 @@ catch {
     Write-Warning "Unable to create the SfMCScript share. Exiting script"
     exit
 }
+$SessionOption = New-PSSessionOption -IdleTimeout 300000
 ## Update variable values with the new share values
 $OutputPath = "\\$env:COMPUTERNAME\SfMCOutput$"
 $ScriptPath = "\\$env:COMPUTERNAME\SfMCScript$"
@@ -182,7 +183,7 @@ $isConnected = $false
 [int]$retryAttempt = 0
 while($isConnected -eq $false) {
     $Error.Clear()
-    try {Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ExchangeServer/Powershell -AllowRedirection -Authentication Kerberos -Name SfMC -WarningAction Ignore -Credential $creds -ErrorAction Ignore) -WarningAction Ignore -DisableNameChecking -AllowClobber -ErrorAction Stop | Out-Null}
+    try {Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ExchangeServer/Powershell -AllowRedirection -Authentication Kerberos -Name SfMC -WarningAction Ignore -Credential $creds -ErrorAction Ignore -SessionOption $SessionOption) -WarningAction Ignore -DisableNameChecking -AllowClobber -ErrorAction Stop | Out-Null}
     catch {
         Write-Warning "Unable to create a remote PowerShell session with $ExchangeServer."
         Start-Sleep -Seconds 2
@@ -235,7 +236,7 @@ Write-host -ForegroundColor Yellow "Collecting data now, please be patient. This
 ## Collect Exchange organization settings
 if($OrgSettings) {
     Write-Host -ForegroundColor Yellow "Collecting Exchange organization settings..." -NoNewline
-    try {Invoke-Command -Credential $creds -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $creds, $OutputPath, $ScriptPath -InDisconnectedSession -ErrorAction Stop | Out-Null}
+    try {Invoke-Command -Credential $creds -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $creds, $OutputPath, $ScriptPath -InDisconnectedSession -ErrorAction Stop -SessionName SfMCOrgDis -SessionOption $SessionOption | Out-Null}
     catch {
         Write-Host "FAILED"
         Write-Warning "Unable to collect Exchange organization settings."
@@ -249,7 +250,7 @@ $failedServers = New-Object System.Collections.ArrayList
 foreach($s in $servers) {
     $Error.Clear()
     Write-Host "Attempt to collect data from $s..." -ForegroundColor Cyan
-    try{Invoke-Command -Credential $creds -ScriptBlock $scriptBlock1 -ComputerName $s -ArgumentList $creds, $OutputPath, $ScriptPath -InDisconnectedSession -ErrorAction Stop| Out-Null}
+    try{Invoke-Command -Credential $creds -ScriptBlock $scriptBlock1 -ComputerName $s -ArgumentList $creds, $OutputPath, $ScriptPath -InDisconnectedSession -ErrorAction Stop -SessionName SfMCSrvDis -SessionOption $SessionOption| Out-Null}
     catch{
         Write-Warning "Unable to connect to $s to collect data."
         $failedServers.Add($s) | Out-Null
