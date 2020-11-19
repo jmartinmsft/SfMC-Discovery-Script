@@ -16,12 +16,13 @@ function Get-OSData {
 }
  function Zip-CsvResults {
      param( [Parameter(Mandatory=$true)][System.Management.Automation.PSCredential]$Credentials,
-        [string]$Destination
+        [string]$Destination,
+        [string]$DataType
     )
 	## Zip up the data collection results
     Add-Type -AssemblyName System.IO.Compression.Filesystem 
     $ts = Get-Date -f yyyyMMddHHmmss
-    [string]$zipFolder = "$env:ExchangeInstallPath\Logging\SfMC Discovery\$ServerName-Settings-$ts.zip"
+    [string]$zipFolder = "$env:ExchangeInstallPath\Logging\SfMC Discovery\$ServerName-$DataType-$ts.zip"
     Get-ChildItem "$env:ExchangeInstallPath\Logging\SfMC Discovery\" -Filter *.zip | Remove-Item -Force -ErrorAction Ignore
     ## Attempt to zip the results
     try {[System.IO.Compression.ZipFile]::CreateFromDirectory($outputPath, $zipFolder)}
@@ -41,9 +42,8 @@ function Get-OSData {
     [int]$retryAttempt = 0
     while($retryAttempt -lt 4) {
         Copy-Item -Path $zipFolder -Destination "SfMC:\" -Force
-        if(Test-Path "SfMC:\$ServerName-Settings-$ts.zip") {$retryAttempt = 4}
+        if(Test-Path "SfMC:\$ServerName-$DataType-$ts.zip") {$retryAttempt = 4}
         else {Start-Sleep -Seconds 3; $retryAttempt++}
-        if($retryAttempt -eq 4) { Write-Error -Message "Unable to move results" }
     }
     ## Clean up
     Remove-PSDrive -Name "SfMC" -Force | Out-Null
@@ -56,7 +56,7 @@ if(!(Test-Path $outputPath)) {
 }
 else {Get-ChildItem -Path $outputPath | Remove-Item -Confirm:$False -Force }
 ## Create a remote PowerShell session with this server
-Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ServerName/Powershell -AllowRedirection -Authentication Kerberos -Credential $creds -Name SfMC -WarningAction Ignore) -WarningAction Ignore -DisableNameChecking | Out-Null
+#Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ServerName/Powershell -AllowRedirection -Authentication Kerberos -Credential $creds -Name SfMC -WarningAction Ignore) -WarningAction Ignore -DisableNameChecking | Out-Null
 ## Data collection starts
 ## General information
 Get-ExchangeServer $ServerName -Status | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv "$outputPath\$ServerName-ExchangeServer.csv" -NoTypeInformation
@@ -124,6 +124,6 @@ $hash = @{
 'CrashControl'='Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\crashcontrol | select @{Name="ServerName"; Expression = {$strServer}},autoreboot,crashdumpenabled,DumpFile,LogEvent,MiniDumpDir,MiniDumpsCount,OverWrite,LastCrashTime'
 }
 Get-OSData -strServer $ServerName
-Zip-CsvResults -Destination $destPath -Credentials $creds
+Zip-CsvResults -Destination $destPath -Credentials $creds -DataType Settings
 ## Clean up
 Remove-PSSession -Name SfMC -ErrorAction Ignore | Out-Null
