@@ -82,7 +82,7 @@ Get-EmailAddressPolicy | Select-Object * -ExcludeProperty SerializationData | Ex
 Get-FederatedOrganizationIdentifier | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-FederatedOrganizationIdentifier.csv -NoTypeInformation
 Get-HybridMailflow | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-HybridMailflow.csv -NoTypeInformation
 Get-HybridMailflowDatacenterIPs | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-HybridMailflowDatacenterIPs.csv -NoTypeInformation
-Get-ImapSubscription | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-ImapSubscription.csv -NoTypeInformation
+#Get-ImapSubscription | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-ImapSubscription.csv -NoTypeInformation
 Get-InboundConnector | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-InboundConnector.csv -NoTypeInformation
 Get-OnPremisesOrganization | Get-IntraOrganizationConfiguration -ErrorAction SilentlyContinue | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-IntraOrganizationConfiguration.csv -NoTypeInformation
 Get-IntraOrganizationConnector | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-IntraOrganizationConnector.csv -NoTypeInformation
@@ -104,7 +104,7 @@ Get-OutlookProtectionRule | Select-Object * -ExcludeProperty SerializationData |
 Get-OwaMailboxPolicy | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-OwaMailboxPolicy.csv -NoTypeInformation
 Get-PartnerApplication | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-PartnerApplication.csv -NoTypeInformation
 Get-PerimeterConfig | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-PerimeterConfig.csv -NoTypeInformation
-Get-PopSubscription | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-PopSubscription.csv -NoTypeInformation
+#Get-PopSubscription | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-PopSubscription.csv -NoTypeInformation
 Get-RemoteDomain | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-RemoteDomain.csv -NoTypeInformation
 Get-ResourceConfig | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-ResourceConfig.csv -NoTypeInformation
 Get-RetentionPolicy | Select-Object * -ExcludeProperty SerializationData | Export-Csv $outputPath\$orgName-RetentionPolicy.csv -NoTypeInformation
