@@ -147,7 +147,15 @@ if($UserName -like $null) {
 $validCreds = $false
 [int]$credAttempt = 0
 while($validCreds -eq $false) {
-    $creds = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials")
+    Write-Host "Please enter the Exchange admin credentials using UPN format" -ForegroundColor Green
+    Start-Sleep -Seconds 2
+    $upnFound = $false
+    while($upnFound -eq $false) {
+        $creds = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials using UPN")
+        if($creds.UserName -like "*@*") {$upnFound = $True}
+        else {Write-Warning "The username must be in UPN format. (ex. jimm@contoso.com)"}
+    }
+    #$creds = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials using UPN")
     $validCreds =  Test-ADAuthentication -username $UserName -password $Password -root $Root
     if($validCreds -eq $false) {
         Write-Warning "Unable to validate your credentials. Please try again."
@@ -171,8 +179,8 @@ catch {
 }
 $SessionOption = New-PSSessionOption -IdleTimeout 300000
 ## Update variable values with the new share values
-$OutputPath = "\\$env:COMPUTERNAME\SfMCOutput$"
-$ScriptPath = "\\$env:COMPUTERNAME\SfMCScript$"
+$OutputPath = "\\$env:COMPUTERNAME.$env:USERDNSDOMAIN\SfMCOutput$"
+$ScriptPath = "\\$env:COMPUTERNAME.$env:USERDNSDOMAIN\SfMCScript$"
 ## Create an array for the list of Exchange servers
 $servers = New-Object System.Collections.ArrayList
 ## Set a timer
