@@ -24,6 +24,38 @@
 .DESCRIPTION
   This script will run Get commands in your Exchange Management Shell to collect configuration data via PowerShell
 
+.PARAMETERS
+    ExchangeServer - The ExchangeServer parameter is required to make the initial remote PowerShell session to retrieve list of Exchange servers in the organization and is used to collect the Exchange organization settings.
+
+    UserName - The UserName parameter specifies the Exchange admin account used to run the data collection scripts
+
+    ServerName - The ServerName parameter specifies a single Exchange server to collect data against.
+
+    DagName - The DagName parameter specifies the name of the Exchange database availability group to collect data against.
+
+    OutputPath - The OutputPath parameters specifies the location for the data collection results.
+
+    ScriptPath - The ScriptPath parameter specifies the location for the data collection scripts.
+
+    ADSite - The ADSite parameter specifies the Active Directory site for the Exchange servers to collect data against.
+
+    OrgSettings - The OrgSettings parameter specifies whether or not Exchange organization settings are collected.
+
+    ServerSettings - The ServerSettings parameter specifies wheter or no Exchange server settings are collected.
+
+.EXAMPLES
+ .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -DagName E19DAG1 -OutputPath c:\Temp\Results
+ This example collects the Exchange organization settings and Exchange server settings for the E19DAG1 database availability group and saves the results in C:\Temp\Results
+
+ .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -OutputPath c:\Temp\Results
+ This example collects the Exchange organization settings and Exchange server settings for all Exchange servers in the organization and saves the results in c:\Temp\Results
+
+ .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -OutputPath c:\Temp\Results -ServerSettings:$False
+ This example collects only the Exchange organization settings and saves the results to c:\Temp\Results
+
+ .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -OutputPath c:\Temp\Results -OrgSettings:$False -ServerName clt-e19-mbx3.resource.local
+ This example collects only the Exchange server settings for clt-e19-mbx3.resource.local and saves the results to c:\Temp\Results
+
 .NOTES
   Exchange server specified should be the latest version in the environment
 #>
