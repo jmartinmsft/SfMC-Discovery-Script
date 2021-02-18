@@ -1,16 +1,61 @@
-﻿param( [Parameter(Mandatory=$true)][System.Management.Automation.PSCredential]$creds,
-[string]$destPath,
-[string]$sPath
-)
+﻿<#
+#################################################################################
+#  DISCLAIMER: 									#
+#										#
+#  	THIS CODE IS SAMPLE CODE. THESE SAMPLES ARE PROVIDED "AS IS" WITHOUT	#
+#  	WARRANTY OF ANY KIND. MICROSOFT FURTHER DISCLAIMS ALL IMPLIED		#
+#	WARRANTIES INCLUDING WITHOUT LIMITATION ANY IMPLIED WARRANTIES OF 	#
+#	MERCHANTABILITY OR OF FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE 	#
+#	RISK ARISING OUT OF THE USE OR PERFORMANCE OF THE SAMPLES REMAINS 	#
+#	WITH YOU. IN NO EVENT SHALL MICROSOFT OR ITS SUPPLIERS BE LIABLE FOR	#
+#	ANY DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR 	#
+#	LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS OF BUSINESS 	#
+#	INFORMATION, OR OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR 	#
+#	INABILITY TO USE THE SAMPLES, EVEN IF MICROSOFT HAS BEEN ADVISED OF 	#
+#	THE POSSIBILITY OF SUCH DAMAGES. BECAUSE SOME STATES DO NOT ALLOW THE 	#
+#	EXCLUSION OR LIMITATION OF LIABILITY FOR CONSEQUENTIAL OR INCIDENTAL 	#
+#	DAMAGES, THE ABOVE LIMITATION MAY NOT APPLY TO YOU.			#
+#										#
+#################################################################################
+VERSION 2.0
+#>
+param( [Parameter(Mandatory=$true)][System.Management.Automation.PSCredential]$creds)
+function Write-Log {
+    param( [string]$Message, [string]$Cmdlet )
+    [pscustomobject]@{
+        Time = (Get-Date -f o)
+        Cmdlet = $Cmdlet
+        Message = $Message
+    } | Export-Csv -Path "$outputPath\$ServerName-LogFile.csv" -Append -NoTypeInformation
+ }
+function Get-OrgData {
+	foreach ($h in $hash.GetEnumerator()) {
+		$Result = $null
+        $CommandName = $h.Name 
+		$Command = $h.Value
+        $Error.Clear()
+        Write-Log -Message $Command -Cmdlet $CommandName
+        try{$Result = Invoke-Expression $h.Value}
+        catch{Write-Log -Message $Error.Exception.ErrorRecord -Cmdlet $CommandName}
+		if($Result -ne $null) {	$Result | Export-Csv $outputPath\$orgName-$CommandName.csv -NoTypeInformation -Force}
+	}
+}
 function Zip-CsvResults {
 	## Zip up the data collection results
     Add-Type -AssemblyName System.IO.Compression.Filesystem 
-    $ts = Get-Date -f yyyyMMddHHmmss
-    [string]$zipFolder = "$env:ExchangeInstallPath\Logging\SfMC Discovery\$orgName-Settings-$ts.zip"
-    Remove-Item $zipFolder -Force -ErrorAction Ignore
-    Set-Location $outputPath
-    [system.io.compression.zipfile]::CreateFromDirectory($outputPath, $zipFolder)
-    return $zipFolder
+    ## Attempt to zip the results
+    try {[System.IO.Compression.ZipFile]::CreateFromDirectory($outputPath, $zipFolder)}
+    catch {
+        try{Remove-Item -Path $zipFolder -Force -ErrorAction Stop}
+        catch{Write-Warning "Failed to remove file."}
+        $zipFile = [System.IO.Compression.ZipFile]::Open($zipFolder, 'update')
+        $compressionLevel = [System.IO.Compression.CompressionLevel]::Fastest
+        Get-ChildItem -Path $outputPath | Select FullName | ForEach-Object {
+            try{[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipFile, $_.FullName, (Split-Path $_.FullName -Leaf), $compressionLevel) | Out-Null }
+            catch {Write-Warning "failed to add"}
+        }
+        $zipFile.Dispose()
+    }
 }
 $ServerName = $env:COMPUTERNAME
 ## Set the destination for the data collection output
@@ -19,81 +64,100 @@ if(!(Test-Path $outputPath)) {New-Item -Path $outputPath -ItemType Directory | O
 ## Remove any previous data
 else {Get-ChildItem -Path $outputPath | Remove-Item -Confirm:$False -Force }
 ## Create a remote PowerShell session with this server
-#Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$ServerName/Powershell -AllowRedirection -Authentication Kerberos -Credential $creds -Name SfMC2 -WarningAction Ignore) -WarningAction Ignore -DisableNameChecking | Out-Null
 [string]$orgName = (Get-OrganizationConfig).Name
+Get-ChildItem -Path "$env:ExchangeInstallPath\Logging\SfMC Discovery" -Filter $orgName*.zip | Remove-Item -Confirm:$False
 Set-ADServerSettings -ViewEntireForest:$True
 ## Data collection starts
-Get-ExchangeServer -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-ExchangeServer.csv -NoTypeInformation
+$hash = @{
+'ExchangeServer' = 'Get-ExchangeServer -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 ## Transport settings
-Get-AcceptedDomain -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-AcceptedDomain.csv -NoTypeInformation
-Get-RemoteDomain -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-RemoteDomain.csv -NoTypeInformation
-Get-TransportConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-TransportConfig.csv -NoTypeInformation
-Get-TransportRule -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-TransportRule.csv -NoTypeInformation
-Get-TransportRuleAction -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-TransportRuleAction.csv -NoTypeInformation
-Get-TransportRulePredicate -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-TransportRulePredicate.csv -NoTypeInformation
-Get-JournalRule -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-JournalRule.csv -NoTypeInformation
-Get-DeliveryAgentConnector -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-DeliveryAgentConnector.csv -NoTypeInformation
-Get-EmailAddressPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-EmailAddressPolicy.csv -NoTypeInformation
-Get-SendConnector -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-SendConnector.csv -NoTypeInformation
-Get-EdgeSubscription -WarningAction SilentlyContinue | Export-Csv $outputPath\$orgName-EdgeSubscription.csv -NoTypeInformation
-Get-EdgeSyncServiceConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-EdgeSyncServiceConfig.csv -NoTypeInformation
+'AcceptedDomain' = 'Get-AcceptedDomain -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'RemoteDomain' = 'Get-RemoteDomain -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'TransportConfig' = 'Get-TransportConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'TransportRule' = 'Get-TransportRule -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'TransportRuleAction' = 'Get-TransportRuleAction -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'TransportRulePredicate' = 'Get-TransportRulePredicate -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'JournalRule' = 'Get-JournalRule -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'DeliveryAgentConnector' = 'Get-DeliveryAgentConnector -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'EmailAddressPolicy' = 'Get-EmailAddressPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'SendConnector' = 'Get-SendConnector -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'EdgeSubscription' = 'Get-EdgeSubscription -WarningAction SilentlyContinue | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'EdgeSyncServiceConfig' = 'Get-EdgeSyncServiceConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 ## Client access settings
-Get-ActiveSyncOrganizationSettings -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-EasOrganizationSettings.csv -NoTypeInformation
-Get-MobileDeviceMailboxPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-EasDeviceMailboxPolicy.csv -NoTypeInformation
-Get-ActiveSyncDeviceAccessRule -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-EasDeviceAccessRule.csv -NoTypeInformation
-Get-ActiveSyncDeviceAutoblockThreshold -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-EasDDeviceAutoblockThreshold.csv -NoTypeInformation
-Get-ClientAccessArray -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-ClientAccessArray.csv -NoTypeInformation
-Get-OwaMailboxPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-OwaMailboxPolicy.csv -NoTypeInformation
-Get-ThrottlingPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-ThrottlingPolicy.csv -NoTypeInformation
-Get-IRMConfiguration -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-IRMConfiguration.csv -NoTypeInformation
-Get-OutlookProtectionRule -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-OutlookProtectionRule.csv -NoTypeInformation
-Get-OutlookProvider -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-OutlookProvider.csv -NoTypeInformation
-Get-ClientAccessRule -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-ClientAccessRule.csv -NoTypeInformation
+'ActiveSyncOrganizationSettings' = 'Get-ActiveSyncOrganizationSettings -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'MobileDeviceMailboxPolicy' = 'Get-MobileDeviceMailboxPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'ActiveSyncDeviceAccessRule' = 'Get-ActiveSyncDeviceAccessRule -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'ActiveSyncDeviceAutoblockThreshold' = 'Get-ActiveSyncDeviceAutoblockThreshold -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'ClientAccessArray' = 'Get-ClientAccessArray -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'OwaMailboxPolicy' = 'Get-OwaMailboxPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'ThrottlingPolicy' = 'Get-ThrottlingPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'IRMConfiguration' = 'Get-IRMConfiguration -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'OutlookProtectionRule' = 'Get-OutlookProtectionRule -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'OutlookProvider' = 'Get-OutlookProvider -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'ClientAccessRule' = 'Get-ClientAccessRule -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 ## Mailbox server settings
-Get-RetentionPolicyTag -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-RetentionPolicyTag.csv -NoTypeInformation
-Get-RetentionPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-RetentionPolicy.csv -NoTypeInformation
-Get-SiteMailbox -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-SiteMailbox.csv -NoTypeInformation
+'RetentionPolicyTag' = 'Get-RetentionPolicyTag -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'RetentionPolicy' = 'Get-RetentionPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'SiteMailbox' = 'Get-SiteMailbox -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 ## Address book settings
-Get-AddressBookPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-AddressBookPolicy.csv -NoTypeInformation
-Get-GlobalAddressList -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-GlobalAddressList.csv -NoTypeInformation
-Get-AddressList -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-AddressList.csv -NoTypeInformation
-Get-OfflineAddressBook -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-OfflineAddressBook.csv -NoTypeInformation
+'AddressBookPolicy' = 'Get-AddressBookPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'GlobalAddressList' = 'Get-GlobalAddressList -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'AddressList' = 'Get-AddressList -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'OfflineAddressBook' = 'Get-OfflineAddressBook -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 ## Administration settings
-Get-AdminAuditLogConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-AdminAuditLogConfig.csv -NoTypeInformation
-Get-ManagementRole -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-ManagementRole.csv -NoTypeInformation
-Get-ManagementRoleEntry "*\*" -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-ManagementRoleEntry.csv -NoTypeInformation
-Get-ManagementRoleAssignment -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-ManagementRoleAssignment.csv -NoTypeInformation
-Get-RoleGroup -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-RoleGroup.csv -NoTypeInformation
-Get-ManagementScope -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-ManagementScope.csv -NoTypeInformation
-Get-RoleAssignmentPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-RoleAssignmentPolicy.csv -NoTypeInformation
+'AdminAuditLogConfig' = 'Get-AdminAuditLogConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'ManagementRole' = 'Get-ManagementRole -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'ManagementRoleEntry' = 'Get-ManagementRoleEntry "*\*" -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'ManagementRoleAssignment' = 'Get-ManagementRoleAssignment -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'RoleGroup' = 'Get-RoleGroup -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'ManagementScope' = 'Get-ManagementScope -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'RoleAssignmentPolicy' = 'Get-RoleAssignmentPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 ## Federation settings
-Get-FederationTrust -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-FederationTrust.csv -NoTypeInformation
-Get-FederatedOrganizationIdentifier -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-FederatedOrganizationIdentifier.csv -NoTypeInformation
-Get-SharingPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-SharingPolicy.csv -NoTypeInformation
-Get-OrganizationRelationship -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-OrganizationRelationship.csv -NoTypeInformation
+'FederationTrust' = 'Get-FederationTrust -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'FederatedOrganizationIdentifier' = 'Get-FederatedOrganizationIdentifier -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'SharingPolicy' = 'Get-SharingPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'OrganizationRelationship' = 'Get-OrganizationRelationship -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 ## Availability service
-Get-IntraOrganizationConnector -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-IntraOrgConnector.csv -NoTypeInformation
-Get-IntraOrganizationConfiguration -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-IntraOrgConfiguration.csv -NoTypeInformation
-Get-AvailabilityAddressSpace -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-AvailabilityAddressSpace.csv -NoTypeInformation
-Get-AvailabilityConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-AvailabilityConfig.csv -NoTypeInformation
+'IntraOrganizationConnector' = 'Get-IntraOrganizationConnector -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'IntraOrganizationConfiguration' = 'Get-IntraOrganizationConfiguration -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'AvailabilityAddressSpace' = 'Get-AvailabilityAddressSpace -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'AvailabilityConfig' = 'Get-AvailabilityConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 ## General settings
-Get-OrganizationConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-OrganizationConfig.csv -NoTypeInformation
-Get-AuthConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-AuthConfig.csv -NoTypeInformation
-Get-AuthServer -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-AuthServer.csv -NoTypeInformation
-Get-HybridConfiguration -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-HybridConfiguration.csv -NoTypeInformation
-Get-MigrationEndpoint -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-MigrationEndpoint.csv -NoTypeInformation
-Get-PartnerApplication -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-PartnerApplication.csv -NoTypeInformation
-Get-PolicyTipConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-PolicyTipConfig.csv -NoTypeInformation
-Get-RMSTemplate -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-RmsTemplate.csv -NoTypeInformation
-Get-SmimeConfig | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-SmimeConfig.csv -NoTypeInformation
-Get-DlpPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-DlpPolicy.csv -NoTypeInformation
-Get-DlpPolicyTemplate -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-DlpPolicyTemplate.csv -NoTypeInformation
-Get-GlobalMonitoringOverride -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-GlobalMonitoringOverride.csv -NoTypeInformation
-Get-DomainController | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Csv $outputPath\$orgName-DomainController.csv -NoTypeInformation
+'OrganizationConfig' = 'Get-OrganizationConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'AuthConfig' = 'Get-AuthConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'AuthServer' = 'Get-AuthServer -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'HybridConfiguration' = 'Get-HybridConfiguration -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'MigrationEndpoint' = 'Get-MigrationEndpoint -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'PartnerApplication' = 'Get-PartnerApplication -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'PolicyTipConfig' = ' Get-PolicyTipConfig -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'RMSTemplate' = 'Get-RMSTemplate -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'SmimeConfig' = 'Get-SmimeConfig | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'DlpPolicy' = 'Get-DlpPolicy -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'DlpPolicyTemplate' = 'Get-DlpPolicyTemplate -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'GlobalMonitoringOverride' = 'Get-GlobalMonitoringOverride -WarningAction Ignore | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'DomainController' = 'Get-DomainController | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+## AD settings
+'ADSite' = 'Get-ADSite -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+'AdSiteLink' = 'Get-AdSiteLink -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+}
+Get-OrgData
+Write-Log -Message "Attempting to zip results" -Cmdlet "ZipCsvResults"
+$ts = Get-Date -f yyyyMMddHHmmss
+[string]$zipFolder = "$env:ExchangeInstallPath\Logging\SfMC Discovery\$orgName-OrgSettings-$ts.zip"
 ## Zip the results and sent to the location where the script was started
-New-PSDrive -Name "SfMC2" -PSProvider FileSystem -Root $destPath -Credential $creds | Out-Null
-[string]$serverResults = Zip-CsvResults
-Move-Item -Path $serverResults -Destination "SfMC2:\" -Force
+Zip-CsvResults
+$zipReady = $false
+$zipAttempt = 1
+while($zipReady -eq $false) {
+    if(Get-Item -Path $zipFolder -ErrorAction Ignore) { $zipReady = $true }
+    else {
+        Start-Sleep -Seconds 10
+        if($zipAttempt -lt 4) { $zipReady = $true }
+        else {
+            Zip-CsvResults
+            $zipAttempt++
+        }
+    }
+}
 ## Cleanup
-Remove-PSDrive -Name "SfMC2" -Force | Out-Null
-Remove-PSSession -Name SfMC2 -ErrorAction Ignore | Out-Null
+Remove-PSSession -Name SfMCOrgDis -ErrorAction Ignore | Out-Null
