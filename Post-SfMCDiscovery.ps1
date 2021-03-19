@@ -41,13 +41,15 @@ Write-host " "
 Start-Sleep -Seconds 3
 $stopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
 $stopWatch.Start()
-Get-ChildItem -Path $OutputPath -Filter *.zip | Select FullName,Name | ForEach-Object { 
-    $serverName = $_.Name.Substring(0,$_.Name.IndexOf("-Settings"))
-    $serverPath = $null
-    $serverPath = "$outputPath\$serverName"
-    try{Expand-Archive -Path $_.FullName -DestinationPath $serverPath -ErrorAction Stop -Force}
-    catch{$zipName = $_.FullName
-        Write-Warning "Unable to extract $zipName."
+Get-ChildItem -Path $OutputPath -Filter *.zip | Select FullName,Name | ForEach-Object {
+    if($_.Name -notlike "*OrgSettings*") {
+        $serverName = $_.Name.Substring(0,$_.Name.IndexOf("-Settings"))
+        $serverPath = $null
+        $serverPath = "$outputPath\$serverName"
+        try{Expand-Archive -Path $_.FullName -DestinationPath $serverPath -ErrorAction Stop -Force}
+        catch{$zipName = $_.FullName
+            Write-Warning "Unable to extract $zipName."
+        }
     }
 }
 Write-host " "
@@ -99,10 +101,10 @@ Get-ChildItem $outputPath -Filter *ReceiveConnector.csv -Recurse | Select-Object
 Get-ChildItem $outputPath -Filter *ScheduledTask.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ScheduledTask.csv -NoTypeInformation -Append
 Get-ChildItem $outputPath -Filter *ServerComponentState.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ServerComponentState.csv -NoTypeInformation -Append
 Get-ChildItem $outputPath -Filter *ServerHealth.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ServerHealth.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *Service.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\Service.csv -NoTypeInformation -Append
+Get-ChildItem $outputPath -Filter *-Service.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\Service.csv -NoTypeInformation -Append
 Get-ChildItem $outputPath -Filter *TransportAgent.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\TransportAgent.csv -NoTypeInformation -Append
 Get-ChildItem $outputPath -Filter *TransportPipeline.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\TransportPipeline.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *TransportService.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\TransportService.csv -NoTypeInformation -Append
+Get-ChildItem $outputPath -Filter *-TransportService.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\TransportService.csv -NoTypeInformation -Append
 Get-ChildItem $outputPath -Filter *WebServicesVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\WebServicesVirtualDirectory.csv -NoTypeInformation -Append
 Get-ChildItem $outputPath -Filter *WindowsFeature.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\WindowsFeature.csv -NoTypeInformation -Append
 
