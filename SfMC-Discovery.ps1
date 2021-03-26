@@ -17,7 +17,7 @@
 #	DAMAGES, THE ABOVE LIMITATION MAY NOT APPLY TO YOU.			#
 #										#
 #################################################################################
-.VERSION 2.0
+.VERSION 2.1
 .SYNOPSIS
   Collect Exchange configuration via PowerShell
  
@@ -128,17 +128,27 @@ if($winRmRule.Enabled -ne $true) { Set-NetFirewallRule $winRmRule.InstanceID -En
 ## Script block to initiate Exchange server discovery
 $scriptBlock1 = {
 Param($param1)
+Start-Transcript
+Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Confirm:$False
 Import-Module $env:ExchangeInstallPath\Bin\RemoteExchange.ps1
 Connect-ExchangeServer -UserName $param1 -Auto
 Set-Location $env:ExchangeInstallPath\Scripts
+Write-Warning (Get-Location)
+Write-Warning ((Get-ChildItem *Discover* | Select-Object Name).Name | Out-String)
+Unblock-File -Path $env:ExchangeInstallPath\Scripts\Get-ExchangeServerDiscovery.ps1 -Confirm:$False
 .\Get-ExchangeServerDiscovery.ps1 -Creds $param1
 }
 ## Script block to initiate Exchange organization discovery
 $scriptBlock2 = {
 Param($param1)
+Start-Transcript
+Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Confirm:$False
 Import-Module $env:ExchangeInstallPath\Bin\RemoteExchange.ps1
 Connect-ExchangeServer -UserName $param1 -Auto
 Set-Location $env:ExchangeInstallPath\Scripts
+Write-Warning (Get-Location)
+Write-Warning ((Get-ChildItem *Discover* | Select-Object Name).Name | Out-String)
+Unblock-File -Path $env:ExchangeInstallPath\Scripts\Get-ExchangeOrgDiscovery.ps1 -Confirm:$False
 .\Get-ExchangeOrgDiscovery.ps1 -Creds $param1
 }
 ## Script block to determine Exchange install path for server
