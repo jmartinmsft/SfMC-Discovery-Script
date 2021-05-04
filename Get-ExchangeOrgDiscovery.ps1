@@ -19,7 +19,7 @@
 #################################################################################
 VERSION 3.0
 #>
-param( [Parameter(Mandatory=$true)][System.Management.Automation.PSCredential]$creds)
+param( [Parameter(Mandatory=$false)][System.Management.Automation.PSCredential]$creds)
 function Write-Log {
     param( [string]$Message, [string]$Cmdlet )
     [pscustomobject]@{
