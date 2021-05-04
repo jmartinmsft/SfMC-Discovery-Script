@@ -17,7 +17,7 @@
 #	DAMAGES, THE ABOVE LIMITATION MAY NOT APPLY TO YOU.			#
 #										#
 #################################################################################
-VERSION 2.0
+VERSION 3.0
 #>
 param( [Parameter(Mandatory=$true)][System.Management.Automation.PSCredential]$creds)
 function Write-Log {
@@ -58,6 +58,7 @@ function Zip-CsvResults {
     }
 }
 $ServerName = $env:COMPUTERNAME
+Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn
 ## Set the destination for the data collection output
 $outputPath = "$env:ExchangeInstallPath\Logging\SfMC Discovery\Org Settings"
 if(!(Test-Path $outputPath)) {New-Item -Path $outputPath -ItemType Directory | Out-Null}

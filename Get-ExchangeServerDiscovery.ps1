@@ -19,7 +19,7 @@
 #################################################################################
 VERSION 2.0
 #>
-param( [Parameter(Mandatory=$true)][System.Management.Automation.PSCredential]$creds)
+param( [Parameter(Mandatory=$false)][System.Management.Automation.PSCredential]$creds)
 function Write-Log {
     param( [string]$Message, [string]$Cmdlet )
     [pscustomobject]@{
@@ -59,6 +59,7 @@ function Zip-CsvResults {
     }
 }
 $ServerName = $env:COMPUTERNAME
+Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn
 ## Set the destination for the data collection output
 $outputPath = "$env:ExchangeInstallPath\Logging\SfMC Discovery\Server Settings"
 if(!(Test-Path $outputPath)) {
@@ -68,9 +69,9 @@ else {Get-ChildItem -Path $outputPath | Remove-Item -Confirm:$False -Force }
 Get-ChildItem -Path "$env:ExchangeInstallPath\Logging\SfMC Discovery" -Filter $env:COMPUTERNAME*.zip | Remove-Item -Confirm:$False -ErrorAction Ignore
 ## Data collection starts
 ## General information
+
 $hash = @{
 'ExchangeServer' = 'Get-ExchangeServer $strServer -Status -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName';
-#'ShouldFail' = 'Get-ExchangeServer me -Status -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName';
 'ExchangeCertificate' = 'Get-ExchangeCertificate -Server $strServer -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 'Partition' = 'Get-Disk | where {$_.Number -notlike $null} | ForEach-Object { Get-Partition -DiskNumber $_.Number | Select * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName }'
 'Disk' = 'Get-Disk | where {$_.Number -notlike $null} | Select * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
@@ -84,6 +85,7 @@ $hash = @{
 'ClientAccessServer' ='Get-ClientAccessServer $strServer -WarningAction Ignore -IncludeAlternateServiceAccountCredentialStatus -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 'EcpVirtualDirectory' = 'Get-EcpVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 'WebServicesVirtualDirectory' = 'Get-WebServicesVirtualDirectory  -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
+#'SleepTime' = 'Start-Sleep -Seconds 60'
 'MapiVirtualDirectory' = 'Get-MapiVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 'ActiveSyncVirtualDirectory' = 'Get-ActiveSyncVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 'OabVirtualDirectory' = 'Get-OabVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'

@@ -17,7 +17,8 @@
 #	DAMAGES, THE ABOVE LIMITATION MAY NOT APPLY TO YOU.			#
 #										#
 #################################################################################
-.VERSION 2.1
+.VERSION 3.0
+
 .SYNOPSIS
   Collect Exchange configuration via PowerShell
  
@@ -127,29 +128,23 @@ $winRmRule = Get-NetFirewallRule -DisplayName "Windows Remote Management (HTTP-I
 if($winRmRule.Enabled -ne $true) { Set-NetFirewallRule $winRmRule.InstanceID -Enabled True }
 ## Script block to initiate Exchange server discovery
 $scriptBlock1 = {
-Param($param1)
-Start-Transcript
-Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Confirm:$False
-Import-Module $env:ExchangeInstallPath\Bin\RemoteExchange.ps1
-Connect-ExchangeServer -UserName $param1 -Auto
-Set-Location $env:ExchangeInstallPath\Scripts
-Write-Warning (Get-Location)
-Write-Warning ((Get-ChildItem *Discover* | Select-Object Name).Name | Out-String)
-Unblock-File -Path $env:ExchangeInstallPath\Scripts\Get-ExchangeServerDiscovery.ps1 -Confirm:$False
-.\Get-ExchangeServerDiscovery.ps1 -Creds $param1
+    Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False
+    $scriptFile = $env:ExchangeInstallPath +"Scripts\Get-ExchangeServerDiscovery.ps1"
+    $scriptFile = "`"$scriptFile`""
+    $Sta = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument "-ExecutionPolicy Unrestricted -WindowStyle Hidden -file $scriptFile"
+    $STPrin = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount
+    $Stt = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMilliseconds(5000)
+    Register-ScheduledTask ExchangeServerDiscovery -Action $Sta -Principal $STPrin -Trigger $Stt
 }
 ## Script block to initiate Exchange organization discovery
 $scriptBlock2 = {
-Param($param1)
-Start-Transcript
-Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Confirm:$False
-Import-Module $env:ExchangeInstallPath\Bin\RemoteExchange.ps1
-Connect-ExchangeServer -UserName $param1 -Auto
-Set-Location $env:ExchangeInstallPath\Scripts
-Write-Warning (Get-Location)
-Write-Warning ((Get-ChildItem *Discover* | Select-Object Name).Name | Out-String)
-Unblock-File -Path $env:ExchangeInstallPath\Scripts\Get-ExchangeOrgDiscovery.ps1 -Confirm:$False
-.\Get-ExchangeOrgDiscovery.ps1 -Creds $param1
+    Unregister-ScheduledTask -TaskName ExchangeOrgDiscovery -Confirm:$False
+    $scriptFile = $env:ExchangeInstallPath +"Scripts\Get-ExchangeOrgDiscovery.ps1"
+    $scriptFile = "`"$scriptFile`""
+    $Sta = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument "-ExecutionPolicy Unrestricted -WindowStyle Hidden -file $scriptFile"
+    $STPrin = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount
+    $Stt = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMilliseconds(5000)
+    Register-ScheduledTask ExchangeOrgDiscovery -Action $Sta -Principal $STPrin -Trigger $Stt
 }
 ## Script block to determine Exchange install path for server
 $scriptBlock3 = {
@@ -209,8 +204,7 @@ while($validCreds -eq $false) {
         if($creds.UserName -like "*@*") {$upnFound = $True}
         else {Write-Warning "The username must be in UPN format. (ex. jimm@contoso.com)"}
     }
-    #$creds = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials using UPN")
-    $validCreds =  Test-ADAuthentication #-username $UserName -password $Password #-root $Root
+    $validCreds =  Test-ADAuthentication
     if($validCreds -eq $false) {
         Write-Warning "Unable to validate your credentials. Please try again."
         $credAttempt++
@@ -221,7 +215,7 @@ while($validCreds -eq $false) {
     }
 }
 ## Set the idle time for the remote PowerShell session
-$SessionOption = New-PSSessionOption -IdleTimeout 900000
+$SessionOption = New-PSSessionOption -IdleTimeout 300000 -OperationTimeout 300000 -OutputBufferingMode Drop
 ## Create an array for the list of Exchange servers
 $servers = New-Object System.Collections.ArrayList
 ## Set a timer
@@ -315,9 +309,8 @@ if($ServerSettings) {
                     ServerName = $s
                     ExchInstallPath = $exchInstallPath
                 } | Export-Csv -Path $OutputPath\ExchInstallPaths.csv -NoTypeInformation -Append
-        
                 ## Copy the discovery script to the Exchange server
-                $Session = New-PSSession -ComputerName $s -Credential $creds -Name CopyServerScript
+                $Session = New-PSSession -ComputerName $s -Credential $creds -Name CopyServerScript -SessionOption $SessionOption
                 Copy-Item "$ScriptPath\Get-ExchangeServerDiscovery.ps1" -Destination "$exchInstallPath\Scripts" -Force -ToSession $Session
                 Remove-PSSession -Name CopyServerScript -ErrorAction Ignore
                 ## Initiate the data collection on the Exchange server
