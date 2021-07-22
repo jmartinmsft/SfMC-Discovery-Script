@@ -1,64 +1,65 @@
-﻿<#
-#################################################################################
-#  DISCLAIMER: 									#
-#										#
-#  	THIS CODE IS SAMPLE CODE. THESE SAMPLES ARE PROVIDED "AS IS" WITHOUT	#
-#  	WARRANTY OF ANY KIND. MICROSOFT FURTHER DISCLAIMS ALL IMPLIED		#
-#	WARRANTIES INCLUDING WITHOUT LIMITATION ANY IMPLIED WARRANTIES OF 	#
-#	MERCHANTABILITY OR OF FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE 	#
-#	RISK ARISING OUT OF THE USE OR PERFORMANCE OF THE SAMPLES REMAINS 	#
-#	WITH YOU. IN NO EVENT SHALL MICROSOFT OR ITS SUPPLIERS BE LIABLE FOR	#
-#	ANY DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR 	#
-#	LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS OF BUSINESS 	#
-#	INFORMATION, OR OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR 	#
-#	INABILITY TO USE THE SAMPLES, EVEN IF MICROSOFT HAS BEEN ADVISED OF 	#
-#	THE POSSIBILITY OF SUCH DAMAGES. BECAUSE SOME STATES DO NOT ALLOW THE 	#
-#	EXCLUSION OR LIMITATION OF LIABILITY FOR CONSEQUENTIAL OR INCIDENTAL 	#
-#	DAMAGES, THE ABOVE LIMITATION MAY NOT APPLY TO YOU.			#
-#										#
-#################################################################################
-.VERSION 3.0
-
-.SYNOPSIS
-  Collect Exchange configuration via PowerShell
- 
-.DESCRIPTION
-  This script will run Get commands in your Exchange Management Shell to collect configuration data via PowerShell
-
-.PARAMETERS
-    ExchangeServer - The ExchangeServer parameter is required to make the initial remote PowerShell session to retrieve list of Exchange servers in the organization and is used to collect the Exchange organization settings.
-
-    UserName - The UserName parameter specifies the Exchange admin account used to run the data collection scripts
-
-    ServerName - The ServerName parameter specifies a single Exchange server to collect data against.
-
-    DagName - The DagName parameter specifies the name of the Exchange database availability group to collect data against.
-
-    OutputPath - The OutputPath parameters specifies the location for the data collection results.
-
-    ScriptPath - The ScriptPath parameter specifies the location for the data collection scripts.
-
-    ADSite - The ADSite parameter specifies the Active Directory site for the Exchange servers to collect data against.
-
-    OrgSettings - The OrgSettings parameter specifies whether or not Exchange organization settings are collected.
-
-    ServerSettings - The ServerSettings parameter specifies wheter or no Exchange server settings are collected.
-
-.EXAMPLES
- .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -DagName E19DAG1 -OutputPath c:\Temp\Results
- This example collects the Exchange organization settings and Exchange server settings for the E19DAG1 database availability group and saves the results in C:\Temp\Results
-
- .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -OutputPath c:\Temp\Results
- This example collects the Exchange organization settings and Exchange server settings for all Exchange servers in the organization and saves the results in c:\Temp\Results
-
- .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -OutputPath c:\Temp\Results -ServerSettings:$False
- This example collects only the Exchange organization settings and saves the results to c:\Temp\Results
-
- .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -OutputPath c:\Temp\Results -OrgSettings:$False -ServerName clt-e19-mbx3.resource.local
- This example collects only the Exchange server settings for clt-e19-mbx3.resource.local and saves the results to c:\Temp\Results
-
-.NOTES
-  Exchange server specified should be the latest version in the environment
+﻿<#//***********************************************************************
+//
+// SfMC-Discovery.ps1
+// Modified 2021/07/22
+// Last Modifier:  Jim Martin
+// Project Owner:  Jim Martin
+// .VERSION 3.1
+//
+// .SYNOPSIS
+//  Collect Exchange configuration via PowerShell
+// 
+// .DESCRIPTION
+//  This script will run Get commands in your Exchange Management Shell to collect configuration data via PowerShell
+//
+// .PARAMETERS
+//    ExchangeServer - The ExchangeServer parameter is required to make the initial remote PowerShell session to retrieve list of Exchange servers in the organization and is used to collect the Exchange organization settings.
+//
+//    UserName - The UserName parameter specifies the Exchange admin account used to run the data collection scripts
+//
+//    ServerName - The ServerName parameter specifies a single Exchange server to collect data against.
+//
+//    DagName - The DagName parameter specifies the name of the Exchange database availability group to collect data against.
+//
+//    OutputPath - The OutputPath parameters specifies the location for the data collection results.
+//
+//    ScriptPath - The ScriptPath parameter specifies the location for the data collection scripts.
+//
+//    ADSite - The ADSite parameter specifies the Active Directory site for the Exchange servers to collect data against.
+//
+//    OrgSettings - The OrgSettings parameter specifies whether or not Exchange organization settings are collected.
+//
+//    ServerSettings - The ServerSettings parameter specifies wheter or no Exchange server settings are collected.
+//
+//.EXAMPLES
+// .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -DagName E19DAG1 -OutputPath c:\Temp\Results
+// This example collects the Exchange organization settings and Exchange server settings for the E19DAG1 database availability group and saves the results in C:\Temp\Results
+//
+// .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -OutputPath c:\Temp\Results
+// This example collects the Exchange organization settings and Exchange server settings for all Exchange servers in the organization and saves the results in c:\Temp\Results
+//
+// .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -OutputPath c:\Temp\Results -ServerSettings:$False
+// This example collects only the Exchange organization settings and saves the results to c:\Temp\Results
+//
+// .\SfMC-Discovery.ps1 -ExchangeServer clt-e19-mbx3.resource.local -UserName administrator@resource.local -OutputPath c:\Temp\Results -OrgSettings:$False -ServerName clt-e19-mbx3.resource.local
+// This example collects only the Exchange server settings for clt-e19-mbx3.resource.local and saves the results to c:\Temp\Results
+//
+//.NOTES
+//  Exchange server specified should be the latest version in the environment
+//
+//***********************************************************************
+//
+// Copyright (c) 2018 Microsoft Corporation. All rights reserved.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+//
+//**********************************************************************​
 #>
 param(
     [Parameter(Mandatory=$true)] [string]$ExchangeServer,
@@ -71,6 +72,21 @@ param(
     [boolean]$OrgSettings=$true,
     [boolean]$ServerSettings=$true
 )
+Clear-Host
+Write-Host -ForegroundColor Yellow '//***********************************************************************'
+Write-Host -ForegroundColor Yellow '//'
+Write-Host -ForegroundColor Yellow '// Copyright (c) 2018 Microsoft Corporation. All rights reserved.'
+Write-Host -ForegroundColor Yellow '//'
+Write-Host -ForegroundColor Yellow '// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR'
+Write-Host -ForegroundColor Yellow '// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,'
+Write-Host -ForegroundColor Yellow '// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE'
+Write-Host -ForegroundColor Yellow '// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER'
+Write-Host -ForegroundColor Yellow '// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,'
+Write-Host -ForegroundColor Yellow '// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN'
+Write-Host -ForegroundColor Yellow '// THE SOFTWARE.'
+Write-Host -ForegroundColor Yellow '//'
+Write-Host -ForegroundColor Yellow '//**********************************************************************​'
+Start-Sleep -Seconds 2
 function Start-Cleanup {
     Remove-PSSession -Name SfMC -ErrorAction Ignore
     Remove-PSSession -Name SfMCOrgDis -ErrorAction Ignore
@@ -408,3 +424,36 @@ Write-Host -ForegroundColor Cyan "    Please upload results to SfMC. - Thank you
 Write-host -ForegroundColor Cyan "==================================================="
 Write-host " "
 Start-Cleanup
+# SIG # Begin signature block
+# MIIFvQYJKoZIhvcNAQcCoIIFrjCCBaoCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCADM3YtILZoivYJ
+# GZmszVBD59JfoH8bN8JHjBZ1zblwXKCCAzYwggMyMIICGqADAgECAhA8ATOaNhKD
+# u0LkWaETEtc0MA0GCSqGSIb3DQEBCwUAMCAxHjAcBgNVBAMMFWptYXJ0aW5AbWlj
+# cm9zb2Z0LmNvbTAeFw0yMTAzMjYxNjU5MDdaFw0yMjAzMjYxNzE5MDdaMCAxHjAc
+# BgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbTCCASIwDQYJKoZIhvcNAQEBBQAD
+# ggEPADCCAQoCggEBAMSWhFMKzV8qMywbj1H6lg4h+cvR9CtxmQ1J3V9uf9+R2d9p
+# laoDqCNS+q8wz+t+QffvmN2YbcsHrXp6O7bF+xYjuPtIurv8wM69RB/Uy1xvsUKD
+# L/ZDQZ0zewMDLb5Nma7IYJCPYelHiSeO0jsyLXTnaOG0Rq633SUkuPv+C3N8GzVs
+# KDnxozmHGYq/fdQEv9Bpci2DkRTtnHvuIreeqsg4lICeTIny8jMY4yC6caQkamzp
+# GcJWWO0YZlTQOaTgHoVVnSZAvdJhzxIX2wqd0/VaVIbpN0HcPKtMrgXv0O2Bl4Lo
+# tmZR7za7H6hamxaPYQHHyReFs2xM7hlVVWhnfpECAwEAAaNoMGYwDgYDVR0PAQH/
+# BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMCAGA1UdEQQZMBeCFWptYXJ0aW5A
+# bWljcm9zb2Z0LmNvbTAdBgNVHQ4EFgQUCB04A8myETdoRJU9zsScvFiRGYkwDQYJ
+# KoZIhvcNAQELBQADggEBAEjsxpuXMBD72jWyft6pTxnOiTtzYykYjLTsh5cRQffc
+# z0sz2y+jL2WxUuiwyqvzIEUjTd/BnCicqFC5WGT3UabGbGBEU5l8vDuXiNrnDf8j
+# zZ3YXF0GLZkqYIZ7lUk7MulNbXFHxDwMFD0E7qNI+IfU4uaBllsQueUV2NPx4uHZ
+# cqtX4ljWuC2+BNh09F4RqtYnocDwJn3W2gdQEAv1OQ3L6cG6N1MWMyHGq0SHQCLq
+# QzAn5DpXfzCBAePRcquoAooSJBfZx1E6JeV26yw2sSnzGUz6UMRWERGPeECSTz3r
+# 8bn3HwYoYcuV+3I7LzEiXOdg3dvXaMf69d13UhMMV1sxggHdMIIB2QIBATA0MCAx
+# HjAcBgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbQIQPAEzmjYSg7tC5FmhExLX
+# NDANBglghkgBZQMEAgEFAKB8MBAGCisGAQQBgjcCAQwxAjAAMBkGCSqGSIb3DQEJ
+# AzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMC8G
+# CSqGSIb3DQEJBDEiBCD0tmfo0R3YacEaAO7FNjvNi876aLb/ZV4wxfnBgL8DYzAN
+# BgkqhkiG9w0BAQEFAASCAQAoTKCDXz1quRX20Hwse93cCSlht9ZWcqfo9JXcAA3D
+# udZP4rkS8InRhLY22qIX39I66z4Qs78uYbUzHdpg7w7WhTXFXQdIQWfAkCnulzsc
+# RY4EF9wBFK5BLHpBhLNxRC49sJ+wkFyTBCct93Yc7i6aENf18pPqJnurlXKpQdH5
+# TR7flfaTyUtJCRatfQNcsMylnycTU//e2LkUoLC3U2BbhRSc+ojpBUO5gPtJa6Au
+# +z6EPxHgD/Z6M8GSW77RLA+7dzmDLGKBCcAvRf/rK2L8LwsTNRUoRCD0+JqDlFuy
+# pQxUvD/U8CfAnHIZNqWu/yl1FziJOHMbLoMBF2jMelTg
+# SIG # End signature block
