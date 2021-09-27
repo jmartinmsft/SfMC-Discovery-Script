@@ -1,10 +1,10 @@
 ﻿<#//***********************************************************************
 //
 // Get-ExchangeServerDiscovery.ps1
-// Modified 2021/07/22
+// Modified 2021/09/27
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// Version: v3.1
+// Version: v4.0
 //
 //***********************************************************************
 //
@@ -46,7 +46,7 @@ function Write-Log {
     } | Export-Csv -Path "$outputPath\$ServerName-LogFile.csv" -Append -NoTypeInformation
  }
  function Get-ServerData {
-	param ([string]$strServer)
+	param ([string]$ServerName)
 	foreach ($h in $hash.GetEnumerator()) {
 		$Result = $null
         $CommandName = $h.Name 
@@ -55,7 +55,7 @@ function Write-Log {
         Write-Log -Message $Command -Cmdlet $CommandName
         try{$Result = Invoke-Expression $h.Value}
         catch{Write-Log -Message $Error.Exception.ErrorRecord -Cmdlet $CommandName}
-		if($Result -ne $null) {	$Result | Export-Csv $outputPath\$strServer-$CommandName.csv -NoTypeInformation -Force}
+		if($Result -ne $null) {	$Result | Export-Csv $outputPath\$ServerName-$CommandName.csv -NoTypeInformation -Force}
 	}
 }
 function Zip-CsvResults {
@@ -86,66 +86,67 @@ else {Get-ChildItem -Path $outputPath | Remove-Item -Confirm:$False -Force }
 Get-ChildItem -Path "$env:ExchangeInstallPath\Logging\SfMC Discovery" -Filter $env:COMPUTERNAME*.zip | Remove-Item -Confirm:$False -ErrorAction Ignore
 ## Data collection starts
 ## General information
-
+Get-ExchangeServer $ServerName -Status -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName  | Export-Clixml $outputPath\$ServerName-ExchangeServer.xml
+Get-ExchangeCertificate -Server $ServerName -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-ExchangeCertificate.xml
+Get-EventLogLevel -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-EventLogLevel.xml
+Get-HealthReport * -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-HealthReport.xml
+Get-ServerComponentState $ServerName -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-ServerComponentState.xml
+Get-ServerHealth $ServerName -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-ServerHealth.xml
+Get-ServerMonitoringOverride $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-ServerMonitoringOverride.xml
+## Client access settings
+Get-AutodiscoverVirtualDirectory -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-AutodiscoverVirtualDirectory.xml
+Get-ClientAccessServer $ServerName -WarningAction Ignore -IncludeAlternateServiceAccountCredentialStatus -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-ClientAccessServer.xml
+Get-EcpVirtualDirectory -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-EcpVirtualDirectory.xml
+Get-WebServicesVirtualDirectory  -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-WebServicesVirtualDirectory.xml
+Get-MapiVirtualDirectory -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-MapiVirtualDirectory.xml
+Get-ActiveSyncVirtualDirectory -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-ActiveSyncVirtualDirectory.xml
+Get-OabVirtualDirectory -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-OabVirtualDirectory.xml
+Get-OwaVirtualDirectory -Server $ServerName -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-OwaVirtualDirectory.xml
+Get-OutlookAnywhere -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-OutlookAnywhere.xml
+Get-PowerShellVirtualDirectory -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-PowerShellVirtualDirectory.xml
+Get-RpcClientAccess -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-RpcClientAccess.xml
+## Transport settings
+Get-ReceiveConnector -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-ReceiveConnector.xml
+Get-ImapSettings -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-ImapSettings.xml
+Get-PopSettings -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-PopSettings.xml
+Get-TransportAgent -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-TransportAgent.xml
+Get-TransportService $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-TransportService.xml
+Get-MailboxTransportService -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-MailboxTransportService.xml
+Get-FrontendTransportService $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-FrontendTransportService.xml
+Get-TransportPipeline -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-TransportPipeline.xml
+## Mailbox settings
+Get-DatabaseAvailabilityGroup (Get-Cluster).Name -Status -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-DatabaseAvailabilityGroup.xml
+Get-DatabaseAvailabilityGroupNetwork -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-DatabaseAvailabilityGroupNetwork.xml
+Get-DatabaseAvailabilityGroupConfiguration -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-DatabaseAvailabilityGroupConfiguration.xml
+Get-MailboxDatabase -Server $ServerName -WarningAction Ignore -Status -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-MailboxDatabase.xml
+Get-MailboxServer $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-MailboxServer.xml
+Get-PublicFolderDatabase -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-PublicFolderDatabase.xml
+## Convert the XML into CSV files
+Get-ChildItem $outputPath -Filter *.xml | ForEach-Object { Import-Clixml $_.FullName | Export-Csv $outputPath\$($_.BaseName).csv -NoTypeInformation -Force }
+Get-ChildItem $outputPath -Filter *.xml | Remove-Item
 $hash = @{
-'ExchangeServer' = 'Get-ExchangeServer $strServer -Status -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName';
-'ExchangeCertificate' = 'Get-ExchangeCertificate -Server $strServer -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
 'Partition' = 'Get-Disk | where {$_.Number -notlike $null} | ForEach-Object { Get-Partition -DiskNumber $_.Number | Select * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName }'
 'Disk' = 'Get-Disk | where {$_.Number -notlike $null} | Select * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'EventLogLevel' = 'Get-EventLogLevel -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'HealthReport' ='Get-HealthReport * -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'ServerComponentState' = 'Get-ServerComponentState $strServer -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'ServerHealth' = 'Get-ServerHealth $strServer -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'ServerMonitoringOverride' = 'Get-ServerMonitoringOverride $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-## Client access settings
-'AutodiscoverVirtualDirectory' = 'Get-AutodiscoverVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'ClientAccessServer' ='Get-ClientAccessServer $strServer -WarningAction Ignore -IncludeAlternateServiceAccountCredentialStatus -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'EcpVirtualDirectory' = 'Get-EcpVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'WebServicesVirtualDirectory' = 'Get-WebServicesVirtualDirectory  -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-#'SleepTime' = 'Start-Sleep -Seconds 60'
-'MapiVirtualDirectory' = 'Get-MapiVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'ActiveSyncVirtualDirectory' = 'Get-ActiveSyncVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'OabVirtualDirectory' = 'Get-OabVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'OwaVirtualDirectory' = 'Get-OwaVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'OutlookAnywhere' = 'Get-OutlookAnywhere -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'PowerShellVirtualDirectory' = 'Get-PowerShellVirtualDirectory -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'RpcClientAccess' = 'Get-RpcClientAccess -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-## Transport settings
-'ReceiveConnector' = 'Get-ReceiveConnector -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'ImapSettings' = 'Get-ImapSettings -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'PopSettings' ='Get-PopSettings -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'TransportAgent' = 'Get-TransportAgent -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'TransportService' = 'Get-TransportService $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'MailboxTransportService' = 'Get-MailboxTransportService -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'FrontendTransportService' = 'Get-FrontendTransportService $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'TransportPipeline' = 'Get-TransportPipeline -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-## Mailbox settings
-'DatabaseAvailabilityGroup' = 'Get-DatabaseAvailabilityGroup (Get-Cluster).Name -Status -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'DatabaseAvailabilityGroupNetwork' = 'Get-DatabaseAvailabilityGroupNetwork -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'DatabaseAvailabilityGroupConfiguration' = 'Get-DatabaseAvailabilityGroupConfiguration -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'MailboxDatabase' = 'Get-MailboxDatabase -Server $strServer -WarningAction Ignore -Status -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'MailboxServer' = 'Get-MailboxServer $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'PublicFolderDatabase' = 'Get-PublicFolderDatabase -Server $strServer -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName'
-'WindowsFeature'='Get-WindowsFeature -ErrorAction Stop  | Where {$_.Installed -eq $True} | Select-Object @{Name="ServerName"; Expression = {$strServer}},Name,DisplayName,Installed,InstallState,FeatureType';
-'HotFix'='Get-HotFix -WarningAction Ignore -ErrorAction Stop  | Select-Object @{Name="ServerName"; Expression = {$strServer}},Description,HotFixID,InstalledBy,InstalledOn';
-'Culture'='Get-Culture -ErrorAction Stop  | Select @{Name="ServerName"; Expression = {$strServer}},LCID,Name,DisplayName';
+'WindowsFeature'='Get-WindowsFeature -ErrorAction Stop  | Where {$_.Installed -eq $True} | Select-Object @{Name="ServerName"; Expression = {$ServerName}},Name,DisplayName,Installed,InstallState,FeatureType';
+'HotFix'='Get-HotFix -WarningAction Ignore -ErrorAction Stop  | Select-Object @{Name="ServerName"; Expression = {$ServerName}},Description,HotFixID,InstalledBy,InstalledOn';
+'Culture'='Get-Culture -ErrorAction Stop  | Select @{Name="ServerName"; Expression = {$ServerName}},LCID,Name,DisplayName';
 'NetAdapter'='Get-NetAdapter -ErrorAction Stop  | Select-Object SystemName,MacAddress,Status,LinkSpeed,MediaType,DriverFileName,InterfaceAlias,ifIndex,IfDesc,DriverVersion,Name,DeviceID';
-'NetIPAddress'='Get-NetIPAddress -ErrorAction Stop  | Where {($_.IPv4Address -ne $null -or $_.IPv6Address -ne $null) -and ($_.IPv4Address -notlike "127*" -and $_.IPv4Address -notlike "169*")} | select @{Name="ServerName"; Expression = {$strServer}},InterfaceAlias,IPv4Address,IPv6Address,SuffixOrigin,PrefixLength | ? {$_.InterfaceAlias -notlike "*Loopback*"}';
-'NetOffloadGlobalSetting'='Get-NetOffloadGlobalSetting -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$strServer}},ReceiveSideScaling,ReceiveSegmentCoalescing,Chimney,TaskOffload,NetworkDirect,NetworkDirectAcrossIPSubnets,PacketCoalescingFilter';
-'NetRoute'='Get-NetRoute  -ErrorAction Stop | select @{Name="ServerName"; Expression = {$strServer}},DestinationPrefix,NextHop,RouteMetric';
-'ScheduledTask'='Get-ScheduledTask -ErrorAction Stop  | Where {$_.State -ne "Disabled"} | Select @{Name="ServerName"; Expression = {$strServer}},TaskPath,TaskName,State';
-'Service'='Get-WmiObject -Query "select * from win32_service" -ErrorAction Stop  | Select @{Name="ServerName"; Expression = {$strServer}},Name,ProcessID,StartMode,State,Status';
-'Processor'='Get-WmiObject -Query "select * from Win32_Processor" -ErrorAction Stop  | Select @{Name="ServerName"; Expression = {$strServer}},Caption,DeviceID, Manufacturer,Name,SocketDesignation,MaxClockSpeed,AddressWidth,NumberOfCores,NumberOfLogicalProcessors';
-'Product'='Get-WmiObject -Query "select * from Win32_Product"  -ErrorAction Stop | Select @{Name="ServerName"; Expression = {$strServer}}, Name, Description, Vendor, Version, IdentifyingNumber, InstallDate, InstallLocation, PackageCode, PackageName, Language';
-'LogicalDisk'='Get-WmiObject -Query "select * from Win32_LogicalDisk"  -ErrorAction Stop | Select @{Name="ServerName"; Expression = {$strServer}}, Name, Description, Size, FreeSpace, FileSystem, VolumeName';
-'Bios'='Get-WmiObject -Query "select * from win32_BIOS" -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$strServer}}, Name,SMBIOSBIOSVersion,Manufacturer,Version';
-'OperatingSystem'='Get-WmiObject -Query "select * from Win32_OperatingSystem" -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$strServer}}, BuildNumber,Version,WindowsDirectory,LastBootUpTime,ServicePackMajorVersion,ServicePackMinorVersion,TotalVirtualMemorySize,TotalVisibleMemorySize';
-'ComputerSystem'='Get-WmiObject -Query "select * from Win32_Computersystem" -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$strServer}}, Name,Domain,Manufacturer,Model';
-'Memory'='Get-WmiObject -Query "select * from Win32_PhysicalMemory" -ErrorAction Stop  | Select @{Name="ServerName"; Expression = {$strServer}}, Capacity, DataWidth, Speed, DeviceLocator, Tag, TypeDetail, Manufacturer, PartNumber';
-'PageFile'='Get-WmiObject -Query "select * from Win32_PageFile" -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$strServer}},Compressed,Description,Drive,Encrypted,FileName,FileSize,FreeSpace,InitialSize,MaximumSize,System';
-'CrashControl'='Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\crashcontrol -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$strServer}},autoreboot,crashdumpenabled,DumpFile,LogEvent,MiniDumpDir,MiniDumpsCount,OverWrite,LastCrashTime'
+'NetIPAddress'='Get-NetIPAddress -ErrorAction Stop  | Where {($_.IPv4Address -ne $null -or $_.IPv6Address -ne $null) -and ($_.IPv4Address -notlike "127*" -and $_.IPv4Address -notlike "169*")} | select @{Name="ServerName"; Expression = {$ServerName}},InterfaceAlias,IPv4Address,IPv6Address,SuffixOrigin,PrefixLength | ? {$_.InterfaceAlias -notlike "*Loopback*"}';
+'NetOffloadGlobalSetting'='Get-NetOffloadGlobalSetting -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$ServerName}},ReceiveSideScaling,ReceiveSegmentCoalescing,Chimney,TaskOffload,NetworkDirect,NetworkDirectAcrossIPSubnets,PacketCoalescingFilter';
+'NetRoute'='Get-NetRoute  -ErrorAction Stop | select @{Name="ServerName"; Expression = {$ServerName}},DestinationPrefix,NextHop,RouteMetric';
+'ScheduledTask'='Get-ScheduledTask -ErrorAction Stop  | Where {$_.State -ne "Disabled"} | Select @{Name="ServerName"; Expression = {$ServerName}},TaskPath,TaskName,State';
+'Service'='Get-WmiObject -Query "select * from win32_service" -ErrorAction Stop  | Select @{Name="ServerName"; Expression = {$ServerName}},Name,ProcessID,StartMode,State,Status';
+'Processor'='Get-WmiObject -Query "select * from Win32_Processor" -ErrorAction Stop  | Select @{Name="ServerName"; Expression = {$ServerName}},Caption,DeviceID, Manufacturer,Name,SocketDesignation,MaxClockSpeed,AddressWidth,NumberOfCores,NumberOfLogicalProcessors';
+'Product'='Get-WmiObject -Query "select * from Win32_Product"  -ErrorAction Stop | Select @{Name="ServerName"; Expression = {$ServerName}}, Name, Description, Vendor, Version, IdentifyingNumber, InstallDate, InstallLocation, PackageCode, PackageName, Language';
+'LogicalDisk'='Get-WmiObject -Query "select * from Win32_LogicalDisk"  -ErrorAction Stop | Select @{Name="ServerName"; Expression = {$ServerName}}, Name, Description, Size, FreeSpace, FileSystem, VolumeName';
+'Bios'='Get-WmiObject -Query "select * from win32_BIOS" -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$ServerName}}, Name,SMBIOSBIOSVersion,Manufacturer,Version';
+'OperatingSystem'='Get-WmiObject -Query "select * from Win32_OperatingSystem" -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$ServerName}}, BuildNumber,Version,WindowsDirectory,LastBootUpTime,ServicePackMajorVersion,ServicePackMinorVersion,TotalVirtualMemorySize,TotalVisibleMemorySize';
+'ComputerSystem'='Get-WmiObject -Query "select * from Win32_Computersystem" -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$ServerName}}, Name,Domain,Manufacturer,Model';
+'Memory'='Get-WmiObject -Query "select * from Win32_PhysicalMemory" -ErrorAction Stop  | Select @{Name="ServerName"; Expression = {$ServerName}}, Capacity, DataWidth, Speed, DeviceLocator, Tag, TypeDetail, Manufacturer, PartNumber';
+'PageFile'='Get-WmiObject -Query "select * from Win32_PageFile" -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$ServerName}},Compressed,Description,Drive,Encrypted,FileName,FileSize,FreeSpace,InitialSize,MaximumSize,System';
+'CrashControl'='Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\crashcontrol -ErrorAction Stop  | select @{Name="ServerName"; Expression = {$ServerName}},autoreboot,crashdumpenabled,DumpFile,LogEvent,MiniDumpDir,MiniDumpsCount,OverWrite,LastCrashTime'
 }
-Get-ServerData -strServer $ServerName
+Get-ServerData -ServerName $ServerName
 Write-Log -Message "Attempting to zip results" -Cmdlet "ZipCsvResults"
 $ts = Get-Date -f yyyyMMddHHmmss
 [string]$zipFolder = "$env:ExchangeInstallPath\Logging\SfMC Discovery\$ServerName-Settings-$ts.zip"
@@ -167,8 +168,8 @@ Remove-PSSession -Name SfMCSrvDis -ErrorAction Ignore | Out-Null
 # SIG # Begin signature block
 # MIIFvQYJKoZIhvcNAQcCoIIFrjCCBaoCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBGNvyDcOBJfpbW
-# ecvdiVSjpFV9cqxZ3fKw7aKGezEJZKCCAzYwggMyMIICGqADAgECAhA8ATOaNhKD
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDHETJugxgtHwtm
+# NTlqLDjDw+8rMV84T55QDaFyZLcsCKCCAzYwggMyMIICGqADAgECAhA8ATOaNhKD
 # u0LkWaETEtc0MA0GCSqGSIb3DQEBCwUAMCAxHjAcBgNVBAMMFWptYXJ0aW5AbWlj
 # cm9zb2Z0LmNvbTAeFw0yMTAzMjYxNjU5MDdaFw0yMjAzMjYxNzE5MDdaMCAxHjAc
 # BgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbTCCASIwDQYJKoZIhvcNAQEBBQAD
@@ -189,11 +190,11 @@ Remove-PSSession -Name SfMCSrvDis -ErrorAction Ignore | Out-Null
 # HjAcBgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbQIQPAEzmjYSg7tC5FmhExLX
 # NDANBglghkgBZQMEAgEFAKB8MBAGCisGAQQBgjcCAQwxAjAAMBkGCSqGSIb3DQEJ
 # AzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMC8G
-# CSqGSIb3DQEJBDEiBCCOWpj++q9ySgSWc1JrQeIYPdPhadZeRdS52CWXTgsyMTAN
-# BgkqhkiG9w0BAQEFAASCAQAETbejZ9uY95gU9VvotDr3MgFDBX7eWbp187eSAEal
-# fCzxnSZRm7Py9C3yTDhxgtMQFiSQvn7p+hMk980HIqdjAKRCeslC+RAvcXMkP0N8
-# BmlCZegUk2d8Bm9ciY7057PqMkyNSh93n2yAp2FeQIbmkiC9L5Gja3pdroG0vAW6
-# mI6Dgt1Oz5ShWeULVKrQbFv3IrE0wcWxRTKNa8joOZHANDoyNbBzvzuH/5kJtrKQ
-# d/VfF3hjH3d71U14UnBdiFmJE9hI1SXPDmygNUOKKRWJMdyJnHyF3/36AkhwNPhW
-# c3cfGbf7nRzWqGrccqdLjWlgkMMhojWUdRmmXipHrFZf
+# CSqGSIb3DQEJBDEiBCCT4sLDhAdpr0wv/OFMzCX9PfXjg8Huns6m6aGUw0moJzAN
+# BgkqhkiG9w0BAQEFAASCAQBI6is918AQ+P6lXI/iGvWloPbncB71j+2pWh3OTUri
+# WGOBi0RMrRRgb4GDGKKAsCw4DgLr5kiHlzteXOYIMbicKlOMSUIT8xKvRC28KGcn
+# 0J4wp+nH/bU1T6Y6xlIELmPkp3o5GX3m7nIoBfiUGqNbn0kfk7bT8jVbQmAfB1V7
+# 3r2BkX9OIPobUh+k4WGmgd82DvhdqnRpBAD62WotAxTugYGlHxw/NuskBdRzj7BB
+# 0BH5xZeFyqzpSSLyo+SktugMwBjs34y7aGa4E2jCulNWPRf9OsxyglcJFdSMed94
+# 8NfOqu2cERhPS3xn7U740OBPKrtF4IpTX4gEp9+rU1Xf
 # SIG # End signature block
