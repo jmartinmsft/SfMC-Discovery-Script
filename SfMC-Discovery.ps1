@@ -1,10 +1,10 @@
 ﻿<#//***********************************************************************
 //
 // SfMC-Discovery.ps1
-// Modified 2021/07/22
+// Modified 2021/11/30
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// .VERSION 3.1
+// .VERSION 3.2
 //
 // .SYNOPSIS
 //  Collect Exchange configuration via PowerShell
@@ -374,6 +374,7 @@ while($fileCheckAttempt -lt 4) {
                     Write-Host "Organization results found" -ForegroundColor Green
                     $orgResultsIn = $true
                 }
+                Invoke-Command -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeOrgDiscovery -Confirm:$False} -Session $Session
                 Remove-PSSession -Name OrgResults -ErrorAction Ignore -Confirm:$False
             }
         }
@@ -399,6 +400,7 @@ while($fileCheckAttempt -lt 4) {
                 }
                 ## Add server to array to check again
                 else {$NotFoundList.Add($_) | Out-Null}
+                Invoke-Command -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False} -Session $Session
                 Remove-PSSession -Name ServerResults -ErrorAction Ignore -Confirm:$False
             }
         }
@@ -424,11 +426,12 @@ Write-Host -ForegroundColor Cyan "    Please upload results to SfMC. - Thank you
 Write-host -ForegroundColor Cyan "==================================================="
 Write-host " "
 Start-Cleanup
+
 # SIG # Begin signature block
 # MIIFvQYJKoZIhvcNAQcCoIIFrjCCBaoCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCADM3YtILZoivYJ
-# GZmszVBD59JfoH8bN8JHjBZ1zblwXKCCAzYwggMyMIICGqADAgECAhA8ATOaNhKD
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAaHeYdrd5JHCDO
+# imlxqW28NbXCoNB4jyHDDnEKe+8JQ6CCAzYwggMyMIICGqADAgECAhA8ATOaNhKD
 # u0LkWaETEtc0MA0GCSqGSIb3DQEBCwUAMCAxHjAcBgNVBAMMFWptYXJ0aW5AbWlj
 # cm9zb2Z0LmNvbTAeFw0yMTAzMjYxNjU5MDdaFw0yMjAzMjYxNzE5MDdaMCAxHjAc
 # BgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbTCCASIwDQYJKoZIhvcNAQEBBQAD
@@ -449,11 +452,11 @@ Start-Cleanup
 # HjAcBgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbQIQPAEzmjYSg7tC5FmhExLX
 # NDANBglghkgBZQMEAgEFAKB8MBAGCisGAQQBgjcCAQwxAjAAMBkGCSqGSIb3DQEJ
 # AzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMC8G
-# CSqGSIb3DQEJBDEiBCD0tmfo0R3YacEaAO7FNjvNi876aLb/ZV4wxfnBgL8DYzAN
-# BgkqhkiG9w0BAQEFAASCAQAoTKCDXz1quRX20Hwse93cCSlht9ZWcqfo9JXcAA3D
-# udZP4rkS8InRhLY22qIX39I66z4Qs78uYbUzHdpg7w7WhTXFXQdIQWfAkCnulzsc
-# RY4EF9wBFK5BLHpBhLNxRC49sJ+wkFyTBCct93Yc7i6aENf18pPqJnurlXKpQdH5
-# TR7flfaTyUtJCRatfQNcsMylnycTU//e2LkUoLC3U2BbhRSc+ojpBUO5gPtJa6Au
-# +z6EPxHgD/Z6M8GSW77RLA+7dzmDLGKBCcAvRf/rK2L8LwsTNRUoRCD0+JqDlFuy
-# pQxUvD/U8CfAnHIZNqWu/yl1FziJOHMbLoMBF2jMelTg
+# CSqGSIb3DQEJBDEiBCC33ffWE4hZwpLApTZJuc4brpglW7Daamvo/9Rg3l346DAN
+# BgkqhkiG9w0BAQEFAASCAQB4d32M8VcC3k07ltwm6cCFC4WW3cxHNPQ6j+GPgM3S
+# blxJNmpR7JQ0KYkAN///ZfnOBaKVCUm3KOTTIigQF7P0Yk9F+nYrQE9CUD/NZ7Fy
+# MgzlHZ6w6d/nOlEgUb7+O47fCwVLFlUzIwIdIrfjUJkTuEDnJ4mc0lKan3CixJ1e
+# a3ASXUvUw1eVFFums+tykqznvsFti3ENtq5DlI9fBx3/prSdTRgRYwPBHu9/Xe9L
+# PeK0Iwj7CATZ7Px8V9Wz8BSUQ9gGGN891FgncC0LBGElWW3brt8ziFqHgX82snWg
+# 56m7M4xhh8fKvJLUdUPDSVkL9DyNbveKRZLRkmXUTgJG
 # SIG # End signature block
