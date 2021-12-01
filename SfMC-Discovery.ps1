@@ -1,10 +1,10 @@
 ﻿<#//***********************************************************************
 //
 // SfMC-Discovery.ps1
-// Modified 2021/11/30
+// Modified 2021/12/01
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// .VERSION 3.2
+// .VERSION 3.3
 //
 // .SYNOPSIS
 //  Collect Exchange configuration via PowerShell
@@ -302,13 +302,14 @@ if($OrgSettings) {
     ## Copy the discovery script to the Exchange server
     $Session = New-PSSession -ComputerName $ExchangeServer -Credential $creds -Name CopyOrgScript
     Copy-Item "$ScriptPath\Get-ExchangeOrgDiscovery.ps1" -Destination "$exchInstallPath\Scripts" -Force -ToSession $Session
-    Remove-PSSession -Name CopyOrgScript -ErrorAction Ignore
     ## Initiate the data collection on the Exchange server
     try {Invoke-Command -Credential $creds -ScriptBlock $scriptBlock2 -ComputerName $ExchangeServer -ArgumentList $creds -InDisconnectedSession -ErrorAction Stop -SessionName SfMCOrgDis -SessionOption $SessionOption | Out-Null}
     catch {
         Write-Host "FAILED"
         Write-Warning "Unable to collect Exchange organization settings."
     }
+    Invoke-Command -ScriptBlock {Unblock-File -Path "$env:ExchangeInstallPath\Scripts\Get-ExchangeOrgDiscovery.ps1" -Confirm:$false} -Session $Session
+    Remove-PSSession -Name CopyOrgScript -ErrorAction Ignore
 }
 if($ServerSettings) {
     Write-Host "Starting data collection on the Exchange servers..." -ForegroundColor Yellow 
@@ -328,10 +329,11 @@ if($ServerSettings) {
                 ## Copy the discovery script to the Exchange server
                 $Session = New-PSSession -ComputerName $s -Credential $creds -Name CopyServerScript -SessionOption $SessionOption
                 Copy-Item "$ScriptPath\Get-ExchangeServerDiscovery.ps1" -Destination "$exchInstallPath\Scripts" -Force -ToSession $Session
-                Remove-PSSession -Name CopyServerScript -ErrorAction Ignore
                 ## Initiate the data collection on the Exchange server
                 try{ Invoke-Command -Credential $creds -ScriptBlock $scriptBlock1 -ComputerName $s -ArgumentList $creds -InDisconnectedSession -ErrorAction Stop -SessionName SfMCSrvDis -SessionOption $SessionOption | Out-Null}
                 catch{ Write-Warning "Unable to initiate data collection on $s."}
+                Invoke-Command -ScriptBlock {Unblock-File -Path "$env:ExchangeInstallPath\Scripts\Get-ExchangeServerDiscovery.ps1" -Confirm:$false} -Session $Session -ErrorAction Ignore
+                Remove-PSSession -Name CopyServerScript -ErrorAction Ignore
             }
             else {Write-Warning "Unable to determine the Exchange install path on $s."}
         }
@@ -400,7 +402,8 @@ while($fileCheckAttempt -lt 4) {
                 }
                 ## Add server to array to check again
                 else {$NotFoundList.Add($_) | Out-Null}
-                Invoke-Command -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False} -Session $Session
+                $scripBlock4 = {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False}
+                Invoke-Command -ScriptBlock $scripBlock4 -Session $Session
                 Remove-PSSession -Name ServerResults -ErrorAction Ignore -Confirm:$False
             }
         }
@@ -430,8 +433,8 @@ Start-Cleanup
 # SIG # Begin signature block
 # MIIFvQYJKoZIhvcNAQcCoIIFrjCCBaoCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAaHeYdrd5JHCDO
-# imlxqW28NbXCoNB4jyHDDnEKe+8JQ6CCAzYwggMyMIICGqADAgECAhA8ATOaNhKD
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAfzMGInSSSvGGK
+# h0K0s1AadLBWHtWJ62BHHaFZ/hNXhqCCAzYwggMyMIICGqADAgECAhA8ATOaNhKD
 # u0LkWaETEtc0MA0GCSqGSIb3DQEBCwUAMCAxHjAcBgNVBAMMFWptYXJ0aW5AbWlj
 # cm9zb2Z0LmNvbTAeFw0yMTAzMjYxNjU5MDdaFw0yMjAzMjYxNzE5MDdaMCAxHjAc
 # BgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbTCCASIwDQYJKoZIhvcNAQEBBQAD
@@ -452,11 +455,11 @@ Start-Cleanup
 # HjAcBgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbQIQPAEzmjYSg7tC5FmhExLX
 # NDANBglghkgBZQMEAgEFAKB8MBAGCisGAQQBgjcCAQwxAjAAMBkGCSqGSIb3DQEJ
 # AzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMC8G
-# CSqGSIb3DQEJBDEiBCC33ffWE4hZwpLApTZJuc4brpglW7Daamvo/9Rg3l346DAN
-# BgkqhkiG9w0BAQEFAASCAQB4d32M8VcC3k07ltwm6cCFC4WW3cxHNPQ6j+GPgM3S
-# blxJNmpR7JQ0KYkAN///ZfnOBaKVCUm3KOTTIigQF7P0Yk9F+nYrQE9CUD/NZ7Fy
-# MgzlHZ6w6d/nOlEgUb7+O47fCwVLFlUzIwIdIrfjUJkTuEDnJ4mc0lKan3CixJ1e
-# a3ASXUvUw1eVFFums+tykqznvsFti3ENtq5DlI9fBx3/prSdTRgRYwPBHu9/Xe9L
-# PeK0Iwj7CATZ7Px8V9Wz8BSUQ9gGGN891FgncC0LBGElWW3brt8ziFqHgX82snWg
-# 56m7M4xhh8fKvJLUdUPDSVkL9DyNbveKRZLRkmXUTgJG
+# CSqGSIb3DQEJBDEiBCDuakqdAcTSfGH/Xj/n1VJJ6OHwMam7yIWETl8N1fvKTzAN
+# BgkqhkiG9w0BAQEFAASCAQBxmlPv4f+/mSGpSG0DJSIp3LMoEb887dzUWS1YSY+e
+# DQUBr+i1ozdlXAafqJPSvKNj6OcN1diKVLXelJ3f1KbB4yBRUoMjjQ7egpzhXdVL
+# XyJB2kdy+Dnh0txFHsIS0jAV350f2cdE4v3BfkVDLi0IcMeNSoPMe9a0VSV+iqw6
+# 3NMNoLDIGeudcV6QSBIMkwtoHwlx+UY521wnQpCA2mADGK+73P5ah3osaLyt7At0
+# eUljg+KbvQFyRmHOZqH3KwudEt66pgrsV5LZnrzRbv15rSsPZTuq4/tjP0esjsLi
+# NeIfbQd9957zwS3zR2QF9pWFRZNt5bkUBxOsL763tDbF
 # SIG # End signature block
