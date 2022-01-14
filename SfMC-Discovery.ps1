@@ -1,10 +1,10 @@
 ﻿<#//***********************************************************************
 //
 // SfMC-Discovery.ps1
-// Modified 2021/12/01
+// Modified 14 January 2022
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// .VERSION 3.3
+// .VERSION 3.2
 //
 // .SYNOPSIS
 //  Collect Exchange configuration via PowerShell
@@ -126,9 +126,14 @@ function Test-ADAuthentication {
 }
 #Clear-Host
 if(-not (Is-Admin)) {
-	Write-host;Write-Warning "The SfMC-Exchange-Discovery.ps1 script needs to be executed in elevated mode. Please start PowerShell 'as Administrator' and try again." 
+	Write-host;Write-Warning "The SfMC-Discovery.ps1 script needs to be executed in elevated mode. Please start PowerShell 'as Administrator' and try again." 
 	Write-host;Start-Sleep -Seconds 2;
 	exit
+}
+if(($PSVersionTable).PSVersion -like "4*") {
+    Write-Host; Write-Warning "The SfMC-Discovery.ps1 script must be executed using Windows PowerShell version 5.0 or higher"
+    Write-Host; Start-Sleep -Seconds 2
+    exit
 }
 Write-host " "
     Write-host " "
@@ -361,6 +366,7 @@ while($fileCheckAttempt -lt 4) {
     if($serverCount -gt 0 -or $orgResultsIn -eq $false) { Start-Sleep -Seconds 120 }
     else {break}
     ## Check for results and retrieve if missing
+    $fileCheckResult = $False
     if($OrgSettings) {
         if($orgResultsIn -eq $false) {
             if(Get-Item $OutputPath\*OrgSettings* -ErrorAction Ignore) { 
@@ -371,16 +377,21 @@ while($fileCheckAttempt -lt 4) {
                 $sourcePath = $orgResultPath
                 $sourcePath = $sourcePath+"Logging\SfMC Discovery"
                 $Session = New-PSSession -ComputerName $ExchangeServer -Credential $creds -Name OrgResults
-                Copy-Item "$sourcePath\*OrgSettings*.zip" -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore
-                if(Get-Item $OutputPath\*OrgSettings* -ErrorAction Ignore) { 
-                    Write-Host "Organization results found" -ForegroundColor Green
-                    $orgResultsIn = $true
+                $scriptBlock5 = {$orgFile = (Get-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\*OrgSettings*.zip").FullName; return $orgFile}
+                $orgResult = Invoke-Command -ScriptBlock $scriptBlock5 -Session $Session -ErrorAction Ignore
+                if($orgResultPath -notlike $null ) {
+                    Copy-Item $orgResult -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore
+                    if(Get-Item $OutputPath\*OrgSettings* -ErrorAction Ignore) { 
+                        Write-Host "Organization results found" -ForegroundColor Green
+                        $orgResultsIn = $true
+                        Invoke-Command -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeOrgDiscovery -Confirm:$False} -Session $Session
+                        Remove-PSSession -Name OrgResults -ErrorAction Ignore -Confirm:$False
+                    }
                 }
-                Invoke-Command -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeOrgDiscovery -Confirm:$False} -Session $Session
-                Remove-PSSession -Name OrgResults -ErrorAction Ignore -Confirm:$False
             }
         }
     }
+    $fileCheckResult = $False
     ## Create an array to track remaining servers to pull results
     [System.Collections.ArrayList]$NotFoundList = @()
     if($ServerSettings) {
@@ -393,18 +404,22 @@ while($fileCheckAttempt -lt 4) {
             else { 
                 ## Attempt to copy results from Exchange server
                 $Session = New-PSSession -ComputerName $_.ServerName -Credential $creds -Name ServerResults
-                Copy-Item "$sourcePath\$s*.zip" -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore 
-                ## Check if the results were found
-                if(Get-Item $OutputPath\$s* -ErrorAction Ignore) { 
-                    Write-Host "Results found for "$_.ServerName -ForegroundColor Cyan;
-                    $foundCount++ 
-                    Write-Progress -PercentComplete (($foundCount/$totalServerCount)*100) -Activity "SfMC Discovery data collection"
+                $scriptBlock5 = {$serverFile = (Get-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\$env:COMPUTERNAME*.zip").FullName; return $serverFile}
+                $serverResult = Invoke-Command -ScriptBlock $scriptBlock5 -Session $Session -ErrorAction Ignore
+                if($serverResult -notlike $null) {
+                    Copy-Item $serverResult -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore 
+                    ## Check if the results were found
+                    if(Get-Item $OutputPath\$s* -ErrorAction Ignore) { 
+                        Write-Host "Results found for "$_.ServerName -ForegroundColor Cyan;
+                        $foundCount++ 
+                        Write-Progress -PercentComplete (($foundCount/$totalServerCount)*100) -Activity "SfMC Discovery data collection"
+                        $scripBlock4 = {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False}
+                        Invoke-Command -ScriptBlock $scripBlock4 -Session $Session -ErrorAction Ignore
+                        Remove-PSSession -Name ServerResults -ErrorAction Ignore -Confirm:$False
+                    }
                 }
                 ## Add server to array to check again
                 else {$NotFoundList.Add($_) | Out-Null}
-                $scripBlock4 = {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False}
-                Invoke-Command -ScriptBlock $scripBlock4 -Session $Session
-                Remove-PSSession -Name ServerResults -ErrorAction Ignore -Confirm:$False
             }
         }
     }
@@ -431,35 +446,23 @@ Write-host " "
 Start-Cleanup
 
 # SIG # Begin signature block
-# MIIFvQYJKoZIhvcNAQcCoIIFrjCCBaoCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIIDZwYJKoZIhvcNAQcCoIIDWDCCA1QCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAfzMGInSSSvGGK
-# h0K0s1AadLBWHtWJ62BHHaFZ/hNXhqCCAzYwggMyMIICGqADAgECAhA8ATOaNhKD
-# u0LkWaETEtc0MA0GCSqGSIb3DQEBCwUAMCAxHjAcBgNVBAMMFWptYXJ0aW5AbWlj
-# cm9zb2Z0LmNvbTAeFw0yMTAzMjYxNjU5MDdaFw0yMjAzMjYxNzE5MDdaMCAxHjAc
-# BgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbTCCASIwDQYJKoZIhvcNAQEBBQAD
-# ggEPADCCAQoCggEBAMSWhFMKzV8qMywbj1H6lg4h+cvR9CtxmQ1J3V9uf9+R2d9p
-# laoDqCNS+q8wz+t+QffvmN2YbcsHrXp6O7bF+xYjuPtIurv8wM69RB/Uy1xvsUKD
-# L/ZDQZ0zewMDLb5Nma7IYJCPYelHiSeO0jsyLXTnaOG0Rq633SUkuPv+C3N8GzVs
-# KDnxozmHGYq/fdQEv9Bpci2DkRTtnHvuIreeqsg4lICeTIny8jMY4yC6caQkamzp
-# GcJWWO0YZlTQOaTgHoVVnSZAvdJhzxIX2wqd0/VaVIbpN0HcPKtMrgXv0O2Bl4Lo
-# tmZR7za7H6hamxaPYQHHyReFs2xM7hlVVWhnfpECAwEAAaNoMGYwDgYDVR0PAQH/
-# BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMCAGA1UdEQQZMBeCFWptYXJ0aW5A
-# bWljcm9zb2Z0LmNvbTAdBgNVHQ4EFgQUCB04A8myETdoRJU9zsScvFiRGYkwDQYJ
-# KoZIhvcNAQELBQADggEBAEjsxpuXMBD72jWyft6pTxnOiTtzYykYjLTsh5cRQffc
-# z0sz2y+jL2WxUuiwyqvzIEUjTd/BnCicqFC5WGT3UabGbGBEU5l8vDuXiNrnDf8j
-# zZ3YXF0GLZkqYIZ7lUk7MulNbXFHxDwMFD0E7qNI+IfU4uaBllsQueUV2NPx4uHZ
-# cqtX4ljWuC2+BNh09F4RqtYnocDwJn3W2gdQEAv1OQ3L6cG6N1MWMyHGq0SHQCLq
-# QzAn5DpXfzCBAePRcquoAooSJBfZx1E6JeV26yw2sSnzGUz6UMRWERGPeECSTz3r
-# 8bn3HwYoYcuV+3I7LzEiXOdg3dvXaMf69d13UhMMV1sxggHdMIIB2QIBATA0MCAx
-# HjAcBgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbQIQPAEzmjYSg7tC5FmhExLX
-# NDANBglghkgBZQMEAgEFAKB8MBAGCisGAQQBgjcCAQwxAjAAMBkGCSqGSIb3DQEJ
-# AzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMC8G
-# CSqGSIb3DQEJBDEiBCDuakqdAcTSfGH/Xj/n1VJJ6OHwMam7yIWETl8N1fvKTzAN
-# BgkqhkiG9w0BAQEFAASCAQBxmlPv4f+/mSGpSG0DJSIp3LMoEb887dzUWS1YSY+e
-# DQUBr+i1ozdlXAafqJPSvKNj6OcN1diKVLXelJ3f1KbB4yBRUoMjjQ7egpzhXdVL
-# XyJB2kdy+Dnh0txFHsIS0jAV350f2cdE4v3BfkVDLi0IcMeNSoPMe9a0VSV+iqw6
-# 3NMNoLDIGeudcV6QSBIMkwtoHwlx+UY521wnQpCA2mADGK+73P5ah3osaLyt7At0
-# eUljg+KbvQFyRmHOZqH3KwudEt66pgrsV5LZnrzRbv15rSsPZTuq4/tjP0esjsLi
-# NeIfbQd9957zwS3zR2QF9pWFRZNt5bkUBxOsL763tDbF
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC24dt4xSxK+nGN
+# L0jWYwkXlKy3JvHqx8PMUQUes+9hl6CCAZQwggGQMIIBFaADAgECAggmFxDWcEY7
+# FTAKBggqhkjOPQQDAzAvMS0wKwYDVQQDEyQ3ZDMxYjI0NC05N2Y5LTQxZDAtYjQ5
+# OS1mYzI0NjMxYmE1YTIwHhcNMjIwMTA0MDE1NjM2WhcNMjMwMTA0MTM1NjM2WjAv
+# MS0wKwYDVQQDEyQ3ZDMxYjI0NC05N2Y5LTQxZDAtYjQ5OS1mYzI0NjMxYmE1YTIw
+# djAQBgcqhkjOPQIBBgUrgQQAIgNiAASUaEmnP41/+lLXJYyUrAgHkTJAAh5eGabX
+# yxoIVZ37/dE/Iyiy8rOraIaAkOEvswb4feDM96Chr0Dvd5DAVGWuxyVSh2xjFfyN
+# P8jCulJgDFNospS9R5aX2h4y5WEn4XUwCgYIKoZIzj0EAwMDaQAwZgIxAJE52jMb
+# c2lnsNMc5DrmsWk9mcWp2nR61oCAY+kBFkVXG229SrsU2QDG/4aCV3i74gIxAJ2p
+# Ym1jSnD1MLCS6W4mpeHGgXoXbXOJ9jqRbWqc3g5ZdDxUXiUo66sVuT2YElKsgDGC
+# ASkwggElAgEBMDswLzEtMCsGA1UEAxMkN2QzMWIyNDQtOTdmOS00MWQwLWI0OTkt
+# ZmMyNDYzMWJhNWEyAggmFxDWcEY7FTANBglghkgBZQMEAgEFAKBeMBAGCisGAQQB
+# gjcCAQwxAjAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMC8GCSqGSIb3DQEJ
+# BDEiBCD3z/s/WJ+fkD5ir4AIB572Pey8mhUb5UoLIpkQab19ozALBgcqhkjOPQIB
+# BQAEZzBlAjEAk4TuO3X9lG0iGpoYmcaE91+a0V+c0MRSaYK9UgNnhtY5/wv2fgyX
+# Iyc5jduXo1jDAjA677VmWCqvZneC8qMbHPxMXyy5m4x5ngs9/dKdDxsLldlaAyed
+# VhaSCw71BSg8kuY=
 # SIG # End signature block
