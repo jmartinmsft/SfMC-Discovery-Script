@@ -1,10 +1,10 @@
 ﻿<#//***********************************************************************
 //
 // Get-ExchangeServerDiscovery.ps1
-// Modified 2021/09/27
+// Modified 14 January 2022
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// Version: v4.0
+// Version: v4.1
 //
 //***********************************************************************
 //
@@ -116,8 +116,7 @@ Get-FrontendTransportService $ServerName -WarningAction Ignore -ErrorAction Stop
 Get-TransportPipeline -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-TransportPipeline.xml
 ## Mailbox settings
 Get-DatabaseAvailabilityGroup (Get-Cluster).Name -Status -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-DatabaseAvailabilityGroup.xml
-Get-DatabaseAvailabilityGroupNetwork -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-DatabaseAvailabilityGroupNetwork.xml
-Get-DatabaseAvailabilityGroupConfiguration -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-DatabaseAvailabilityGroupConfiguration.xml
+Get-DatabaseAvailabilityGroupNetwork (Get-Cluster).Name -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-DatabaseAvailabilityGroupNetwork.xml
 Get-MailboxDatabase -Server $ServerName -WarningAction Ignore -Status -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-MailboxDatabase.xml
 Get-MailboxServer $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-MailboxServer.xml
 Get-PublicFolderDatabase -Server $ServerName -WarningAction Ignore -ErrorAction Stop  | Select-Object * -ExcludeProperty SerializationData, PSComputerName, RunspaceId, PSShowComputerName | Export-Clixml $outputPath\$ServerName-PublicFolderDatabase.xml
@@ -165,36 +164,25 @@ while($zipReady -eq $false) {
 }
 ## Clean up
 Remove-PSSession -Name SfMCSrvDis -ErrorAction Ignore | Out-Null
+
 # SIG # Begin signature block
-# MIIFvQYJKoZIhvcNAQcCoIIFrjCCBaoCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIIDZgYJKoZIhvcNAQcCoIIDVzCCA1MCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDHETJugxgtHwtm
-# NTlqLDjDw+8rMV84T55QDaFyZLcsCKCCAzYwggMyMIICGqADAgECAhA8ATOaNhKD
-# u0LkWaETEtc0MA0GCSqGSIb3DQEBCwUAMCAxHjAcBgNVBAMMFWptYXJ0aW5AbWlj
-# cm9zb2Z0LmNvbTAeFw0yMTAzMjYxNjU5MDdaFw0yMjAzMjYxNzE5MDdaMCAxHjAc
-# BgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbTCCASIwDQYJKoZIhvcNAQEBBQAD
-# ggEPADCCAQoCggEBAMSWhFMKzV8qMywbj1H6lg4h+cvR9CtxmQ1J3V9uf9+R2d9p
-# laoDqCNS+q8wz+t+QffvmN2YbcsHrXp6O7bF+xYjuPtIurv8wM69RB/Uy1xvsUKD
-# L/ZDQZ0zewMDLb5Nma7IYJCPYelHiSeO0jsyLXTnaOG0Rq633SUkuPv+C3N8GzVs
-# KDnxozmHGYq/fdQEv9Bpci2DkRTtnHvuIreeqsg4lICeTIny8jMY4yC6caQkamzp
-# GcJWWO0YZlTQOaTgHoVVnSZAvdJhzxIX2wqd0/VaVIbpN0HcPKtMrgXv0O2Bl4Lo
-# tmZR7za7H6hamxaPYQHHyReFs2xM7hlVVWhnfpECAwEAAaNoMGYwDgYDVR0PAQH/
-# BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMCAGA1UdEQQZMBeCFWptYXJ0aW5A
-# bWljcm9zb2Z0LmNvbTAdBgNVHQ4EFgQUCB04A8myETdoRJU9zsScvFiRGYkwDQYJ
-# KoZIhvcNAQELBQADggEBAEjsxpuXMBD72jWyft6pTxnOiTtzYykYjLTsh5cRQffc
-# z0sz2y+jL2WxUuiwyqvzIEUjTd/BnCicqFC5WGT3UabGbGBEU5l8vDuXiNrnDf8j
-# zZ3YXF0GLZkqYIZ7lUk7MulNbXFHxDwMFD0E7qNI+IfU4uaBllsQueUV2NPx4uHZ
-# cqtX4ljWuC2+BNh09F4RqtYnocDwJn3W2gdQEAv1OQ3L6cG6N1MWMyHGq0SHQCLq
-# QzAn5DpXfzCBAePRcquoAooSJBfZx1E6JeV26yw2sSnzGUz6UMRWERGPeECSTz3r
-# 8bn3HwYoYcuV+3I7LzEiXOdg3dvXaMf69d13UhMMV1sxggHdMIIB2QIBATA0MCAx
-# HjAcBgNVBAMMFWptYXJ0aW5AbWljcm9zb2Z0LmNvbQIQPAEzmjYSg7tC5FmhExLX
-# NDANBglghkgBZQMEAgEFAKB8MBAGCisGAQQBgjcCAQwxAjAAMBkGCSqGSIb3DQEJ
-# AzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMC8G
-# CSqGSIb3DQEJBDEiBCCT4sLDhAdpr0wv/OFMzCX9PfXjg8Huns6m6aGUw0moJzAN
-# BgkqhkiG9w0BAQEFAASCAQBI6is918AQ+P6lXI/iGvWloPbncB71j+2pWh3OTUri
-# WGOBi0RMrRRgb4GDGKKAsCw4DgLr5kiHlzteXOYIMbicKlOMSUIT8xKvRC28KGcn
-# 0J4wp+nH/bU1T6Y6xlIELmPkp3o5GX3m7nIoBfiUGqNbn0kfk7bT8jVbQmAfB1V7
-# 3r2BkX9OIPobUh+k4WGmgd82DvhdqnRpBAD62WotAxTugYGlHxw/NuskBdRzj7BB
-# 0BH5xZeFyqzpSSLyo+SktugMwBjs34y7aGa4E2jCulNWPRf9OsxyglcJFdSMed94
-# 8NfOqu2cERhPS3xn7U740OBPKrtF4IpTX4gEp9+rU1Xf
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCApbd3PX6JzpwF
+# YiHpN0A/AaJz4+bd/F7C6Pu2yiW3Y6CCAZQwggGQMIIBFaADAgECAggmFxDWcEY7
+# FTAKBggqhkjOPQQDAzAvMS0wKwYDVQQDEyQ3ZDMxYjI0NC05N2Y5LTQxZDAtYjQ5
+# OS1mYzI0NjMxYmE1YTIwHhcNMjIwMTA0MDE1NjM2WhcNMjMwMTA0MTM1NjM2WjAv
+# MS0wKwYDVQQDEyQ3ZDMxYjI0NC05N2Y5LTQxZDAtYjQ5OS1mYzI0NjMxYmE1YTIw
+# djAQBgcqhkjOPQIBBgUrgQQAIgNiAASUaEmnP41/+lLXJYyUrAgHkTJAAh5eGabX
+# yxoIVZ37/dE/Iyiy8rOraIaAkOEvswb4feDM96Chr0Dvd5DAVGWuxyVSh2xjFfyN
+# P8jCulJgDFNospS9R5aX2h4y5WEn4XUwCgYIKoZIzj0EAwMDaQAwZgIxAJE52jMb
+# c2lnsNMc5DrmsWk9mcWp2nR61oCAY+kBFkVXG229SrsU2QDG/4aCV3i74gIxAJ2p
+# Ym1jSnD1MLCS6W4mpeHGgXoXbXOJ9jqRbWqc3g5ZdDxUXiUo66sVuT2YElKsgDGC
+# ASgwggEkAgEBMDswLzEtMCsGA1UEAxMkN2QzMWIyNDQtOTdmOS00MWQwLWI0OTkt
+# ZmMyNDYzMWJhNWEyAggmFxDWcEY7FTANBglghkgBZQMEAgEFAKBeMBAGCisGAQQB
+# gjcCAQwxAjAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMC8GCSqGSIb3DQEJ
+# BDEiBCA9mtuaNEBDeDqI6msdMR8A8YS4PIAB5w1cIqRDcQPXdjALBgcqhkjOPQIB
+# BQAEZjBkAjBSCoKJpZ2i++gM3vuE3mKaoGeQDJBIc0OCpax30xmX2rCHKURd6qh2
+# 4uyNVD008YMCMAuoPnctuWMtJiDg9Taqoqd+6U4uJK1pz6xMgwww+ss1pZYZquX7
+# 2kmsUJ97nWsP1A==
 # SIG # End signature block
