@@ -332,7 +332,7 @@ if($ServerSettings) {
     foreach ($s in $servers) {
         ## Get the Exchange install path for this server
         $exchInstallPath = $null
-        Write-Progress -Activity "Exchange Discovery Assessment" -Status $s -PercentComplete (($sAttempted/$servers.Count)*100)
+        Write-Progress -Activity "Exchange Discovery Assessment" -Status "Starting data collection on $s" -PercentComplete (($sAttempted/$servers.Count)*100)
         if(Test-Connection -ComputerName $s -Count 2 -ErrorAction Ignore) {
             $exchInstallPath = Invoke-Command -Credential $creds -ScriptBlock $scriptBlock3 -ComputerName $ExchangeServer -ErrorAction Stop
             ## Create an array to store paths for data retrieval
@@ -419,7 +419,7 @@ while($fileCheckAttempt -lt 4) {
             $sourcePath = $_.ExchInstallPath
             $sourcePath = $sourcePath+"Logging\SfMC Discovery"
             ## Check if server results have been received
-            Write-Progress -Activity "Exchange Discovery Assessment" -Status $s -PercentComplete (($foundCount/$totalServerCount)*100)
+            Write-Progress -Activity "Exchange Discovery Assessment" -Status "Retrieving data from $s" -PercentComplete (($foundCount/$totalServerCount)*100)
             if(!(Get-Item $OutputPath\$s* -ErrorAction Ignore)) { 
                 ## Attempt to copy results from Exchange server
                 $Session = New-PSSession -ComputerName $_.ServerName -Credential $creds -Name ServerResults
@@ -429,7 +429,6 @@ while($fileCheckAttempt -lt 4) {
                     Copy-Item $serverResult -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore 
                     ## Check if the results were found
                     if(Get-Item $OutputPath\$s* -ErrorAction Ignore) { 
-                        Write-Host $foundCount
                         $scripBlock4 = {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False}
                         Invoke-Command -ScriptBlock $scripBlock4 -Session $Session -ErrorAction Ignore
                         Remove-PSSession -Name ServerResults -ErrorAction Ignore -Confirm:$False
