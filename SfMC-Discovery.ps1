@@ -4,7 +4,7 @@
 // Modified 28 March 2022
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// .VERSION 3.3
+// .VERSION 3.4
 //
 // .SYNOPSIS
 //  Collect Exchange configuration via PowerShell
@@ -139,7 +139,7 @@ Write-Host -ForegroundColor Cyan " It will take some time to complete depending 
 Write-Host " "
 Write-Host -ForegroundColor Cyan "==============================================================================="
 Write-Host " "
-Start-Sleep -Seconds 2
+
 ## Script block to initiate Exchange server discovery
 $scriptBlock1 = {
     Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False
@@ -216,7 +216,7 @@ $validCreds = $false
 [int]$credAttempt = 0
 while($validCreds -eq $false) {
     Write-Host "Please enter the Exchange admin credentials using UPN format" -ForegroundColor Green
-    #Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 2
     $upnFound = $false
     while($upnFound -eq $false) {
         $creds = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials using UPN")
@@ -377,8 +377,7 @@ while($fileCheckAttempt -lt 4) {
         ## Wait x minutes before attempting to retrieve the data
         $waitTimer = New-Object -TypeName System.Diagnostics.Stopwatch
         $waitTimer.Start()
-        #while($waitTimer.ElapsedMilliseconds -lt 120000){
-        while($waitTimer.ElapsedMilliseconds -lt 30000){
+        while($waitTimer.ElapsedMilliseconds -lt 120000){
             Write-Progress -Activity "Exchange Discovery Assessment" -Status "Waiting two minutes before attempting to retrive data" -PercentComplete (($waitTimer.ElapsedMilliseconds/120000)*100)
             Start-Sleep -Seconds 1
         }
@@ -388,8 +387,9 @@ while($fileCheckAttempt -lt 4) {
     $fileCheckResult = $False
     if($OrgSettings) {
         if($orgResultsIn -eq $false) {
+            Write-Host "Retrieving Exchange organization settings..." -ForegroundColor Cyan -NoNewline
             if(Get-Item $OutputPath\*OrgSettings* -ErrorAction Ignore) { 
-                Write-Host "Exchange Organization setting found" -ForegroundColor White
+                Write-Host "FOUND" -ForegroundColor White
                 $orgResultsIn = $true
             }
             else {
@@ -398,14 +398,17 @@ while($fileCheckAttempt -lt 4) {
                 $Session = New-PSSession -ComputerName $ExchangeServer -Credential $creds -Name OrgResults
                 $scriptBlock5 = {$orgFile = (Get-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\*OrgSettings*.zip").FullName; return $orgFile}
                 $orgResult = Invoke-Command -ScriptBlock $scriptBlock5 -Session $Session -ErrorAction Ignore
-                if($orgResultPath -notlike $null ) {
+                if($orgResult -notlike $null ) {
                     Copy-Item $orgResult -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore
                     if(Get-Item $OutputPath\*OrgSettings* -ErrorAction Ignore) { 
-                        Write-Host "Exchange Organization settings found" -ForegroundColor White
+                        Write-Host "FOUND" -ForegroundColor White
                         $orgResultsIn = $true
                         Invoke-Command -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeOrgDiscovery -Confirm:$False} -Session $Session
                         Remove-PSSession -Name OrgResults -ErrorAction Ignore -Confirm:$False
                     }
+                }
+                else {
+                    Write-Host "NOT FOUND" -ForegroundColor Red
                 }
             }
         }
@@ -414,6 +417,7 @@ while($fileCheckAttempt -lt 4) {
     ## Create an array to track remaining servers to pull results
     [System.Collections.ArrayList]$NotFoundList = @()
     if($ServerSettings) {
+        Write-Host "Retrieving Exchange server settings..." -ForegroundColor Cyan -NoNewline
         $servers | ForEach-Object {
             $s = $_.ServerName.Substring(0, $_.ServerName.IndexOf("."))
             $sourcePath = $_.ExchInstallPath
@@ -428,7 +432,8 @@ while($fileCheckAttempt -lt 4) {
                 if($serverResult -notlike $null) {
                     Copy-Item $serverResult -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore 
                     ## Check if the results were found
-                    if(Get-Item $OutputPath\$s* -ErrorAction Ignore) { 
+                    if(Get-Item $OutputPath\$s* -ErrorAction Ignore) {
+                        $foundCount++
                         $scripBlock4 = {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False}
                         Invoke-Command -ScriptBlock $scripBlock4 -Session $Session -ErrorAction Ignore
                         Remove-PSSession -Name ServerResults -ErrorAction Ignore -Confirm:$False
@@ -438,6 +443,11 @@ while($fileCheckAttempt -lt 4) {
                 else {$NotFoundList.Add($_) | Out-Null}
             }
         }
+    }
+    if($foundCount -eq $totalServerCount) { Write-Host "FOUND"}
+    else{
+        if($foundCount -gt 0) {Write-Host "INCOMPLETE" -ForegroundColor Yellow}
+        else {Write-Host "NOT FOUND" -ForegroundColor Red}
     }
     $Servers = $NotFoundList
     $serverCount = $servers.ServerName.Count
