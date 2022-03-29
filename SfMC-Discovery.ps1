@@ -1,10 +1,10 @@
 ﻿<#//***********************************************************************
 //
 // SfMC-Discovery.ps1
-// Modified 14 January 2022
+// Modified 28 March 2022
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// .VERSION 3.2
+// .VERSION 3.3
 //
 // .SYNOPSIS
 //  Collect Exchange configuration via PowerShell
@@ -14,21 +14,13 @@
 //
 // .PARAMETERS
 //    ExchangeServer - The ExchangeServer parameter is required to make the initial remote PowerShell session to retrieve list of Exchange servers in the organization and is used to collect the Exchange organization settings.
-//
 //    UserName - The UserName parameter specifies the Exchange admin account used to run the data collection scripts
-//
 //    ServerName - The ServerName parameter specifies a single Exchange server to collect data against.
-//
 //    DagName - The DagName parameter specifies the name of the Exchange database availability group to collect data against.
-//
 //    OutputPath - The OutputPath parameters specifies the location for the data collection results.
-//
 //    ScriptPath - The ScriptPath parameter specifies the location for the data collection scripts.
-//
 //    ADSite - The ADSite parameter specifies the Active Directory site for the Exchange servers to collect data against.
-//
 //    OrgSettings - The OrgSettings parameter specifies whether or not Exchange organization settings are collected.
-//
 //    ServerSettings - The ServerSettings parameter specifies wheter or no Exchange server settings are collected.
 //
 //.EXAMPLES
@@ -73,6 +65,7 @@ param(
     [boolean]$ServerSettings=$true
 )
 Clear-Host
+#region Disclaimer
 Write-Host -ForegroundColor Yellow '//***********************************************************************'
 Write-Host -ForegroundColor Yellow '//'
 Write-Host -ForegroundColor Yellow '// Copyright (c) 2018 Microsoft Corporation. All rights reserved.'
@@ -86,13 +79,12 @@ Write-Host -ForegroundColor Yellow '// OUT OF OR IN CONNECTION WITH THE SOFTWARE
 Write-Host -ForegroundColor Yellow '// THE SOFTWARE.'
 Write-Host -ForegroundColor Yellow '//'
 Write-Host -ForegroundColor Yellow '//**********************************************************************​'
-Start-Sleep -Seconds 2
+#endregion
+#Start-Sleep -Seconds 2
 function Start-Cleanup {
     Remove-PSSession -Name SfMC -ErrorAction Ignore
     Remove-PSSession -Name SfMCOrgDis -ErrorAction Ignore
     Get-PSSession -Name SfMCSrvDis -ErrorAction Ignore | Remove-PSSession -ErrorAction Ignore
-    if($winRmRule.Enabled -ne $true) { Set-NetFirewallRule $winRmRule.InstanceID -Enabled False }
-
 }
 function Get-FolderPath {   
     $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -124,29 +116,30 @@ function Test-ADAuthentication {
         else {return $false}
     }
 }
-#Clear-Host
+#region CheckAdmin
 if(-not (Is-Admin)) {
 	Write-host;Write-Warning "The SfMC-Discovery.ps1 script needs to be executed in elevated mode. Please start PowerShell 'as Administrator' and try again." 
 	Write-host;Start-Sleep -Seconds 2;
 	exit
 }
+#endregion
+#region CheckPowerShell
 if(($PSVersionTable).PSVersion -like "4*") {
     Write-Host; Write-Warning "The SfMC-Discovery.ps1 script must be executed using Windows PowerShell version 5.0 or higher"
     Write-Host; Start-Sleep -Seconds 2
     exit
 }
-Write-host " "
-    Write-host " "
-    Write-host -ForegroundColor Cyan "==============================================================================="
-    Write-host " "
-    Write-Host -ForegroundColor Cyan " The SfMC Email Discovery process is about to begin gathering data. "
-    Write-host -ForegroundColor Cyan " It will take some time to complete depending on the size of your environment. "
-    Write-host " "
-    Write-host -ForegroundColor Cyan "==============================================================================="
-    Write-host " "
-## Get the current firewall settings for WinRM
-$winRmRule = Get-NetFirewallRule -DisplayName "Windows Remote Management (HTTP-In)" | Where {$_.Profile -match "Domain" -and $_.Direction -eq "Inbound"}
-if($winRmRule.Enabled -ne $true) { Set-NetFirewallRule $winRmRule.InstanceID -Enabled True }
+#endregion
+Write-Host " "
+Write-Host " "
+Write-Host -ForegroundColor Cyan "==============================================================================="
+Write-Host " "
+Write-Host -ForegroundColor Cyan " The SfMC Email Discovery process is about to begin gathering data. "
+Write-Host -ForegroundColor Cyan " It will take some time to complete depending on the size of your environment. "
+Write-Host " "
+Write-Host -ForegroundColor Cyan "==============================================================================="
+Write-Host " "
+Start-Sleep -Seconds 2
 ## Script block to initiate Exchange server discovery
 $scriptBlock1 = {
     Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False
@@ -171,7 +164,8 @@ $scriptBlock2 = {
 $scriptBlock3 = {
     $env:ExchangeInstallPath
 }
-## Get the location for the scripts
+#region ScriptLocation
+#Determine location of scripts
 Add-Type -AssemblyName System.Windows.Forms
 [boolean]$validPath = $false
 while($validPath -eq $false) {
@@ -186,6 +180,8 @@ while($validPath -eq $false) {
         $ScriptPath = Get-FolderPath
     }
 }
+#endregion
+#region OutputPath
 # Determine the current location which will be used to store the results
 [boolean]$validPath = $false
 while($validPath -eq $false) {
@@ -203,22 +199,24 @@ while($validPath -eq $false) {
         $OutputPath = Get-FolderPath
     }
 }
-Write-Warning "Removing any existing results from $OutputPath."
-Start-Sleep -Seconds 2
-Get-ChildItem $OutputPath\*.zip | Remove-Item -Force
-Remove-Item $OutputPath\ExchInstallPaths.csv -Force -ErrorAction Ignore
+#Create a new subfolder for the current results
+$timeStamp = Get-Date -Format yyyyMMddHHmmss
+New-Item -Path $OutputPath -Name $timeStamp -ItemType Directory | Out-Null
+$OriginalPath = $OutputPath
+$OutputPath = "$OutputPath\$timeStamp"
+#endregion
+#region GetAdminCreds
 ## Get the current user name and prompt for credentials
 if($UserName -like $null) {
     $domain = $env:USERDNSDOMAIN
     $UserName = $env:USERNAME
     $UserName = "$UserName@$domain"
 }
-Start-Sleep -Seconds 2
 $validCreds = $false
 [int]$credAttempt = 0
 while($validCreds -eq $false) {
     Write-Host "Please enter the Exchange admin credentials using UPN format" -ForegroundColor Green
-    Start-Sleep -Seconds 2
+    #Start-Sleep -Seconds 2
     $upnFound = $false
     while($upnFound -eq $false) {
         $creds = [System.Management.Automation.PSCredential](Get-Credential -UserName $UserName.ToLower() -Message "Exchange admin credentials using UPN")
@@ -235,13 +233,15 @@ while($validCreds -eq $false) {
         exit
     }
 }
+#endregion
 ## Set the idle time for the remote PowerShell session
 $SessionOption = New-PSSessionOption -IdleTimeout 300000 -OperationTimeout 300000 -OutputBufferingMode Drop
 ## Create an array for the list of Exchange servers
 $servers = New-Object System.Collections.ArrayList
-## Set a timer
+## Set a timer for the data collection process
 $stopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
 $stopWatch.Start()
+#region GetExchangeServerList
 ## Connect to the Exchange server to get a list of servers for data collection
 $isConnected = $false
 [int]$retryAttempt = 0
@@ -265,6 +265,7 @@ while($isConnected -eq $false) {
     else{$isConnected = $true}
 }
 [string]$orgName = (Get-OrganizationConfig).Name
+#Check if running against a single server
 if($ServerName -notlike $null) {
     $CheckServer = (Get-ExchangeServer -Identity $ServerName -ErrorAction Ignore).Fqdn
     if($CheckServer -notlike $null) {
@@ -276,6 +277,7 @@ if($ServerName -notlike $null) {
         exit
     }
 }
+#check if running against a single DAG
 else {
     if($DagName -notlike $null) { 
         Get-DatabaseAvailabilityGroup $DagName -ErrorAction Ignore | Select -ExpandProperty Servers | ForEach-Object { $servers.Add((Get-ExchangeServer $_ ).Fqdn) | Out-Null}
@@ -285,6 +287,7 @@ else {
             exit
         }
     }
+    #check if running against an AD site
     else {
         if($ADSite -notlike $null) {
             Get-ExchangeServer | Where {$_.Site -like "*$ADSite*" -and $_.ServerRole -ne "Edge"} | ForEach-Object { $servers.Add($_.Fqdn) | Out-Null}
@@ -294,13 +297,16 @@ else {
                 exit
             }
         }
+        #otherwise run against all servers
         else {Get-ExchangeServer | Where { $_.ServerRole -ne "Edge"} | ForEach-Object { $servers.Add($_.Fqdn) | Out-Null } }
     }
 }
-Write-host -ForegroundColor Yellow "Collecting data now, please be patient. This will take some time to complete!"
+#endregion
+Write-host -ForegroundColor Cyan "Collecting data now, please be patient. This will take some time to complete!"
+#region GetExchOrgSettings
 ## Collect Exchange organization settings
 if($OrgSettings) {
-    Write-Host -ForegroundColor Yellow "Collecting Exchange organization settings..."
+    Write-Host -ForegroundColor Cyan "Starting data collection for Exchange organization settings..." -NoNewline
     ## Get the Exchange install path for this server    
     $exchInstallPath = Invoke-Command -Credential $creds -ScriptBlock $scriptBlock3 -ComputerName $ExchangeServer -ErrorAction Stop
     $orgResultPath = $exchInstallPath
@@ -315,14 +321,18 @@ if($OrgSettings) {
     }
     Invoke-Command -ScriptBlock {Unblock-File -Path "$env:ExchangeInstallPath\Scripts\Get-ExchangeOrgDiscovery.ps1" -Confirm:$false} -Session $Session
     Remove-PSSession -Name CopyOrgScript -ErrorAction Ignore
+    Write-Host "STARTED"
 }
+#endregion
+#region GetExchServerSettings
 if($ServerSettings) {
-    Write-Host "Starting data collection on the Exchange servers..." -ForegroundColor Yellow 
+    Write-Host "Starting data collection on the Exchange servers..." -ForegroundColor Cyan -NoNewline
+    $sAttempted = 0
     ## Collect server specific data from all the servers
     foreach ($s in $servers) {
         ## Get the Exchange install path for this server
         $exchInstallPath = $null
-        Write-Host "Attempting to trigger data collection from $s" -ForegroundColor Cyan
+        Write-Progress -Activity "Exchange Discovery Assessment" -Status $s -PercentComplete (($sAttempted/$servers.Count)*100)
         if(Test-Connection -ComputerName $s -Count 2 -ErrorAction Ignore) {
             $exchInstallPath = Invoke-Command -Credential $creds -ScriptBlock $scriptBlock3 -ComputerName $ExchangeServer -ErrorAction Stop
             ## Create an array to store paths for data retrieval
@@ -340,15 +350,17 @@ if($ServerSettings) {
                 Invoke-Command -ScriptBlock {Unblock-File -Path "$env:ExchangeInstallPath\Scripts\Get-ExchangeServerDiscovery.ps1" -Confirm:$false} -Session $Session -ErrorAction Ignore
                 Remove-PSSession -Name CopyServerScript -ErrorAction Ignore
             }
-            else {Write-Warning "Unable to determine the Exchange install path on $s."}
+            else {Out-File $OutputPath\FailedServers.txt -InputObject "Unable to determine the Exchange install path on $s" -Append}
         }
-        else {Write-Warning "Unable to connect to $s to collect data."}
+        else {Out-File $OutputPath\FailedServers.txt -InputObject "Unable to connect to $s" -Append}
+        $sAttempted++
     }
+    Write-Host "STARTED"
 }
-$monitorWatch = New-Object -TypeName System.Diagnostics.Stopwatch
-$monitorWatch.Start()
+#endregion
 ## Check for results
-Write-Host "Attempting to retrieve results..." -ForegroundColor Yellow
+Write-Host "Attempting to retrieve results..." -ForegroundColor Cyan
+#region CollectResults
 [int]$fileCheckAttempt = 0
 if($OrgSettings) {$orgResultsIn = $false}
 ## Get list of servers and install paths to retrieve data
@@ -361,16 +373,23 @@ $totalServerCount = $serverCount
 $foundCount = 0
 ## Attempt to retrieve the data multiple times
 while($fileCheckAttempt -lt 4) {
-    Write-Progress -PercentComplete (($foundCount/$totalServerCount)*100) -Activity "SfMC Discovery data collection"
-    ## Only pause when waiting for results
-    if($serverCount -gt 0 -or $orgResultsIn -eq $false) { Start-Sleep -Seconds 120 }
+    if($serverCount -gt 0 -or $orgResultsIn -eq $false) { 
+        ## Wait x minutes before attempting to retrieve the data
+        $waitTimer = New-Object -TypeName System.Diagnostics.Stopwatch
+        $waitTimer.Start()
+        #while($waitTimer.ElapsedMilliseconds -lt 120000){
+        while($waitTimer.ElapsedMilliseconds -lt 30000){
+            Write-Progress -Activity "Exchange Discovery Assessment" -Status "Waiting two minutes before attempting to retrive data" -PercentComplete (($waitTimer.ElapsedMilliseconds/120000)*100)
+            Start-Sleep -Seconds 1
+        }
+    }
     else {break}
     ## Check for results and retrieve if missing
     $fileCheckResult = $False
     if($OrgSettings) {
         if($orgResultsIn -eq $false) {
             if(Get-Item $OutputPath\*OrgSettings* -ErrorAction Ignore) { 
-                Write-Host "Organization results found" -ForegroundColor Green
+                Write-Host "Exchange Organization setting found" -ForegroundColor White
                 $orgResultsIn = $true
             }
             else {
@@ -382,7 +401,7 @@ while($fileCheckAttempt -lt 4) {
                 if($orgResultPath -notlike $null ) {
                     Copy-Item $orgResult -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore
                     if(Get-Item $OutputPath\*OrgSettings* -ErrorAction Ignore) { 
-                        Write-Host "Organization results found" -ForegroundColor Green
+                        Write-Host "Exchange Organization settings found" -ForegroundColor White
                         $orgResultsIn = $true
                         Invoke-Command -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeOrgDiscovery -Confirm:$False} -Session $Session
                         Remove-PSSession -Name OrgResults -ErrorAction Ignore -Confirm:$False
@@ -400,8 +419,8 @@ while($fileCheckAttempt -lt 4) {
             $sourcePath = $_.ExchInstallPath
             $sourcePath = $sourcePath+"Logging\SfMC Discovery"
             ## Check if server results have been received
-            if(Get-Item $OutputPath\$s* -ErrorAction Ignore) { Write-Host "Results found for "$_.ServerName -ForegroundColor Cyan }
-            else { 
+            Write-Progress -Activity "Exchange Discovery Assessment" -Status $s -PercentComplete (($foundCount/$totalServerCount)*100)
+            if(!(Get-Item $OutputPath\$s* -ErrorAction Ignore)) { 
                 ## Attempt to copy results from Exchange server
                 $Session = New-PSSession -ComputerName $_.ServerName -Credential $creds -Name ServerResults
                 $scriptBlock5 = {$serverFile = (Get-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\$env:COMPUTERNAME*.zip").FullName; return $serverFile}
@@ -410,9 +429,7 @@ while($fileCheckAttempt -lt 4) {
                     Copy-Item $serverResult -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore 
                     ## Check if the results were found
                     if(Get-Item $OutputPath\$s* -ErrorAction Ignore) { 
-                        Write-Host "Results found for "$_.ServerName -ForegroundColor Cyan;
-                        $foundCount++ 
-                        Write-Progress -PercentComplete (($foundCount/$totalServerCount)*100) -Activity "SfMC Discovery data collection"
+                        Write-Host $foundCount
                         $scripBlock4 = {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False}
                         Invoke-Command -ScriptBlock $scripBlock4 -Session $Session -ErrorAction Ignore
                         Remove-PSSession -Name ServerResults -ErrorAction Ignore -Confirm:$False
@@ -428,14 +445,15 @@ while($fileCheckAttempt -lt 4) {
     $fileCheckAttempt++
 }
 foreach($s in $NotFoundList) {
-    $s.ServerName | Out-File $OutputPath\MissingServerResults.txt -Append
+    $mServer = $s.ServerName
+    Out-File $OutputPath\FailedServers.txt -InputObject "Unable to retrieve data for $mServer" -Append
 }
+#endregion
 Write-Host " "
 $stopWatch.Stop()
 $totalTime = $stopWatch.Elapsed.TotalSeconds
 $timeStamp = Get-Date -Format yyyyMMddHHmmss
-Write-Host $LocalOutputPath
-Compress-Archive -Path $OutputPath -DestinationPath ".\DiscoveryResults-$timeStamp.zip"
+Compress-Archive -Path $OutputPath -DestinationPath "$OriginalPath\DiscoveryResults-$timeStamp.zip"
 Write-host " "
 Write-host -ForegroundColor Cyan  "==================================================="
 Write-Host -ForegroundColor Cyan " SfMC Email Discovery data collection has finished!"
@@ -444,25 +462,3 @@ Write-Host -ForegroundColor Cyan "    Please upload results to SfMC. - Thank you
 Write-host -ForegroundColor Cyan "==================================================="
 Write-host " "
 Start-Cleanup
-
-# SIG # Begin signature block
-# MIIDZwYJKoZIhvcNAQcCoIIDWDCCA1QCAQExDzANBglghkgBZQMEAgEFADB5Bgor
-# BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC24dt4xSxK+nGN
-# L0jWYwkXlKy3JvHqx8PMUQUes+9hl6CCAZQwggGQMIIBFaADAgECAggmFxDWcEY7
-# FTAKBggqhkjOPQQDAzAvMS0wKwYDVQQDEyQ3ZDMxYjI0NC05N2Y5LTQxZDAtYjQ5
-# OS1mYzI0NjMxYmE1YTIwHhcNMjIwMTA0MDE1NjM2WhcNMjMwMTA0MTM1NjM2WjAv
-# MS0wKwYDVQQDEyQ3ZDMxYjI0NC05N2Y5LTQxZDAtYjQ5OS1mYzI0NjMxYmE1YTIw
-# djAQBgcqhkjOPQIBBgUrgQQAIgNiAASUaEmnP41/+lLXJYyUrAgHkTJAAh5eGabX
-# yxoIVZ37/dE/Iyiy8rOraIaAkOEvswb4feDM96Chr0Dvd5DAVGWuxyVSh2xjFfyN
-# P8jCulJgDFNospS9R5aX2h4y5WEn4XUwCgYIKoZIzj0EAwMDaQAwZgIxAJE52jMb
-# c2lnsNMc5DrmsWk9mcWp2nR61oCAY+kBFkVXG229SrsU2QDG/4aCV3i74gIxAJ2p
-# Ym1jSnD1MLCS6W4mpeHGgXoXbXOJ9jqRbWqc3g5ZdDxUXiUo66sVuT2YElKsgDGC
-# ASkwggElAgEBMDswLzEtMCsGA1UEAxMkN2QzMWIyNDQtOTdmOS00MWQwLWI0OTkt
-# ZmMyNDYzMWJhNWEyAggmFxDWcEY7FTANBglghkgBZQMEAgEFAKBeMBAGCisGAQQB
-# gjcCAQwxAjAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMC8GCSqGSIb3DQEJ
-# BDEiBCD3z/s/WJ+fkD5ir4AIB572Pey8mhUb5UoLIpkQab19ozALBgcqhkjOPQIB
-# BQAEZzBlAjEAk4TuO3X9lG0iGpoYmcaE91+a0V+c0MRSaYK9UgNnhtY5/wv2fgyX
-# Iyc5jduXo1jDAjA677VmWCqvZneC8qMbHPxMXyy5m4x5ngs9/dKdDxsLldlaAyed
-# VhaSCw71BSg8kuY=
-# SIG # End signature block
