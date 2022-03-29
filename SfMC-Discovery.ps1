@@ -4,7 +4,7 @@
 // Modified 28 March 2022
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// .VERSION 3.4
+// .VERSION 3.5
 //
 // .SYNOPSIS
 //  Collect Exchange configuration via PowerShell
@@ -444,9 +444,9 @@ while($fileCheckAttempt -lt 4) {
             }
         }
     }
-    if($foundCount -eq $totalServerCount) { Write-Host "FOUND"}
+    if($foundCount -eq $totalServerCount) { Write-Host "FOUND"; $ServerSettings = $False}
     else{
-        if($foundCount -gt 0) {Write-Host "INCOMPLETE" -ForegroundColor Yellow}
+        if($foundCount -gt 0) {Write-Host "$foundCount of $totalServerCount FOUND" -ForegroundColor Yellow}
         else {Write-Host "NOT FOUND" -ForegroundColor Red}
     }
     $Servers = $NotFoundList
