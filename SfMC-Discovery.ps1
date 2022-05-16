@@ -1,10 +1,10 @@
 ﻿<#//***********************************************************************
 //
 // SfMC-Discovery.ps1
-// Modified 28 March 2022
+// Modified 16 May 2022
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// .VERSION 3.5
+// .VERSION 3.6
 //
 // .SYNOPSIS
 //  Collect Exchange configuration via PowerShell
@@ -38,6 +38,7 @@
 //
 //.NOTES
 //  Exchange server specified should be the latest version in the environment
+// 
 //
 //***********************************************************************
 //
@@ -332,7 +333,9 @@ if($ServerSettings) {
     foreach ($s in $servers) {
         ## Get the Exchange install path for this server
         $exchInstallPath = $null
-        Write-Progress -Activity "Exchange Discovery Assessment" -Status "Starting data collection on $s" -PercentComplete (($sAttempted/$servers.Count)*100)
+        $PercentComplete = (($sAttempted/$servers.Count)*100)
+        $PercentComplete = [math]::Round($PercentComplete)
+        Write-Progress -Activity "Exchange Discovery Assessment" -Status "Starting data collection on $s.....$PercentComplete% complete" -PercentComplete $PercentComplete
         if(Test-Connection -ComputerName $s -Count 2 -ErrorAction Ignore) {
             $exchInstallPath = Invoke-Command -Credential $creds -ScriptBlock $scriptBlock3 -ComputerName $ExchangeServer -ErrorAction Stop
             ## Create an array to store paths for data retrieval
@@ -377,8 +380,10 @@ while($fileCheckAttempt -lt 4) {
         ## Wait x minutes before attempting to retrieve the data
         $waitTimer = New-Object -TypeName System.Diagnostics.Stopwatch
         $waitTimer.Start()
-        while($waitTimer.ElapsedMilliseconds -lt 120000){
-            Write-Progress -Activity "Exchange Discovery Assessment" -Status "Waiting two minutes before attempting to retrive data" -PercentComplete (($waitTimer.ElapsedMilliseconds/120000)*100)
+        while($waitTimer.ElapsedMilliseconds -lt 60000){
+            $TimeRemaining = $waitTimer.ElapsedMilliseconds/1000
+            $TimeRemaining = 120 - [math]::Round($TimeRemaining)
+            Write-Progress -Activity "Exchange Discovery Assessment" -Status "Waiting two minutes before attempting to retrive data... $TimeRemaining seconds remaining" -PercentComplete (($waitTimer.ElapsedMilliseconds/120000)*100)
             Start-Sleep -Seconds 1
         }
     }
@@ -416,6 +421,7 @@ while($fileCheckAttempt -lt 4) {
     $fileCheckResult = $False
     ## Create an array to track remaining servers to pull results
     [System.Collections.ArrayList]$NotFoundList = @()
+    [int]$sAttempted = 0
     if($ServerSettings) {
         Write-Host "Retrieving Exchange server settings..." -ForegroundColor Cyan -NoNewline
         $servers | ForEach-Object {
@@ -423,7 +429,9 @@ while($fileCheckAttempt -lt 4) {
             $sourcePath = $_.ExchInstallPath
             $sourcePath = $sourcePath+"Logging\SfMC Discovery"
             ## Check if server results have been received
-            Write-Progress -Activity "Exchange Discovery Assessment" -Status "Retrieving data from $s" -PercentComplete (($foundCount/$totalServerCount)*100)
+            $PercentComplete = (($sAttempted/$servers.Count)*100)
+            $PercentComplete = [math]::Round($PercentComplete)
+            Write-Progress -Activity "Exchange Discovery Assessment" -Status "Retrieving data from $s.....$PercentComplete% complete" -PercentComplete (($foundCount/$totalServerCount)*100)
             if(!(Get-Item $OutputPath\$s* -ErrorAction Ignore)) { 
                 ## Attempt to copy results from Exchange server
                 $Session = New-PSSession -ComputerName $_.ServerName -Credential $creds -Name ServerResults
@@ -437,6 +445,7 @@ while($fileCheckAttempt -lt 4) {
                         $scripBlock4 = {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False}
                         Invoke-Command -ScriptBlock $scripBlock4 -Session $Session -ErrorAction Ignore
                         Remove-PSSession -Name ServerResults -ErrorAction Ignore -Confirm:$False
+                        $sAttempted++
                     }
                 }
                 ## Add server to array to check again
