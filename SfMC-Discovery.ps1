@@ -381,7 +381,28 @@ while($validPath -eq $false) {
     }
 }
 #endregion
-
+#region Check and get HealthChecker
+if($HealthChecker) {
+    if(Get-Item $ScriptPath\HealthChecker.ps1 -ErrorAction Ignore) {
+        $HCPresent = $true
+    } else {
+    $HCPresent = $false
+    }
+    try { Invoke-WebRequest -Uri "https://github.com/microsoft/CSS-Exchange/releases/latest/download/HealthChecker.ps1" -OutFile "$ScriptPath\HealthChecker.ps1"
+    }
+    catch {
+        if($HCPresent) {
+            Write-Verbose "Unable to download the latest version of the HealthChecker script."
+            Write-Host "Unable to download the latest version of the HealthChecker script."
+        }
+        else {
+            Write-Verbose "Unable to download the HealthChecker script. Please download and save to the script path."
+            Write-Warning "Unable to download the HealthChecker script. Please download and save to the script path."
+            exit
+        }
+    }
+}
+#endregion
 #region Determine the location for the results
 Write-Verbose "Checking for the location for the output."
 [boolean]$validPath = $false
