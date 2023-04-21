@@ -1,10 +1,10 @@
 ﻿<#//***********************************************************************
 //
 // SfMC-Discovery.ps1
-// Modified 18 November 2022
+// Modified 21 April 2023
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// .VERSION 20221118.1228
+// .VERSION 20230421.1909
 //
 // .SYNOPSIS
 //  Collect Exchange configuration via PowerShell
@@ -333,6 +333,46 @@ function Check-RunningFromExchangeServer {
     }
     return $isExchangeServer
 }
+function Check-OrgCollectionStarted{
+    Write-Verbose "Checking if Exchange organization data collection started on $($ExchangeServer)."
+    $StartCheck = Invoke-ScriptBlockHandler -ScriptBlock {Get-EventLog -LogName Application -Source "MSExchange ADAccess" -InstanceId 1125 -After (Get-Date -Date (Get-Date).AddMinutes(-2) -Format "M/d/yyyy HH:mm") -ErrorAction Ignore} -ComputerName $ExchangeServer -Credential $creds
+    if($StartCheck -notlike $null) {
+        Write-Verbose "Exchange organization data collection has started on $($ExchangeServer)."
+    }
+    else {
+        Write-Verbose "Exchange organization data collection failed to start on $($ExchangeServer)."
+        Write-VerboseLog "Checking for Exchange organization scheduled task on $($ExchangeServer)."
+        $OrgTask = Invoke-ScriptBlockHandler -ScriptBlock {Get-ScheduledTask ExchangeOrgDiscovery -ErrorAction Ignore -TaskPath \ } -ComputerName $ExchangeServer -Credential $creds
+        if($OrgTask -like $null) {
+            Write-Verbose "Failed to create scheduled task on $($ExchangeServer)."
+        }
+        else {
+            Write-Verbose "Exchange organization scheduled task found on $($ExchangeServer)."
+            Write-Verbose "Attempting to start the Exchange organization scheduled task on $($ExchangeServer)."
+            Invoke-ScriptBlockHandler -ScriptBlock {Start-ScheduledTask ExchangeOrgDiscovery -TaskPath \ -ErrorAction Ignore } -ComputerName $ExchangeServer -Credential $creds
+        }
+    }        
+}
+function Check-ServerCollectionStarted{
+    Write-Verbose "Checking if Exchange server data collection started on $($ExchangeServer)."
+    $StartCheck = Invoke-ScriptBlockHandler -ScriptBlock {Get-EventLog -LogName Application -Source "MSExchange ADAccess" -InstanceId 1031 -After (Get-Date -Date (Get-Date).AddMinutes(-2) -Format "M/d/yyyy HH:mm") -ErrorAction Ignore} -ComputerName $s.Fqdn -Credential $creds
+    if($StartCheck -notlike $null) {
+        Write-VerboseLog "Exchange server data collection has started on $($s.Name)."
+    }
+    else {
+        Write-VerboseLog "Exchange server data collection failed to start on $($s.Name)."
+        Write-VerboseLog "Checking for Exchange server scheduled task on $($s.Name)."
+        $ServerTask = Invoke-ScriptBlockHandler -ScriptBlock {Get-ScheduledTask ExchangeServerDiscovery -ErrorAction Ignore -TaskPath \ } -ComputerName $s.Fqdn -Credential $creds
+        if($ServerTask -like $null) {
+            Write-Verbose "Failed to create scheduled task on $($s.Name)."
+        }
+        else {
+            Write-Verbose "Exchange server scheduled task found on $($s.Name)."
+            Write-Verbose "Attempting to start the Exchange server scheduled task on $($s.Name)."
+            Invoke-ScriptBlockHandler -ScriptBlock {Start-ScheduledTask ExchangeServerDiscovery -TaskPath \ -ErrorAction Ignore } -ComputerName $s.Fqdn -Credential $creds
+        }
+    }        
+}
 
 Add-Type -AssemblyName System.Windows.Forms
 $Script:Logger = Get-NewLoggerInstance -LogName "SfMCDiscovery-$((Get-Date).ToString("yyyyMMddhhmmss"))-Debug" -AppendDateTimeToFileName $false -ErrorAction SilentlyContinue
@@ -340,8 +380,9 @@ $Script:Logger = Get-NewLoggerInstance -LogName "SfMCDiscovery-$((Get-Date).ToSt
 #region SfMCBanner
 Write-Host " "
 Write-Host " "
-Write-Host -ForegroundColor Cyan "==============================================================================="
+Write-Host -ForegroundColor Cyan "=====================SfMC Discovery version 20230421.1909====================="
 Write-Host " "
+Write-Host -ForegroundColor Cyan "  "
 Write-Host -ForegroundColor Cyan " The SfMC Email Discovery process is about to begin gathering data. "
 Write-Host -ForegroundColor Cyan " It will take some time to complete depending on the size of your environment. "
 Write-Host " "
@@ -358,8 +399,8 @@ $ExchangeServerDiscovery = {
     $scriptFile = ".\Get-ExchangeServerDiscovery.ps1"
     $Sta = New-ScheduledTaskAction -Execute "Powershell.exe" -WorkingDirectory $startInDirectory  -Argument "-ExecutionPolicy Unrestricted -WindowStyle Hidden -Command `"& $scriptFile -HealthChecker:`$$HealthChecker`""
     $STPrin = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount
-    $Stt = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMilliseconds(5000)
-    Register-ScheduledTask ExchangeServerDiscovery -Action $Sta -Principal $STPrin -Trigger $Stt
+    Register-ScheduledTask ExchangeServerDiscovery -Action $Sta -Principal $STPrin
+    Start-ScheduledTask ExchangeServerDiscovery -ErrorAction Ignore
 }
 ## Script block to initiate Exchange organization discovery
 $ExchangeOrgDiscovery = {
@@ -368,8 +409,8 @@ $ExchangeOrgDiscovery = {
     $scriptFile = "`"$scriptFile`""
     $Sta = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument "-ExecutionPolicy Unrestricted -WindowStyle Hidden -file $scriptFile"
     $STPrin = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount
-    $Stt = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMilliseconds(5000)
-    Register-ScheduledTask ExchangeOrgDiscovery -Action $Sta -Principal $STPrin -Trigger $Stt
+    Register-ScheduledTask ExchangeOrgDiscovery -Action $Sta -Principal $STPrin
+    Start-ScheduledTask ExchangeOrgDiscovery -ErrorAction Ignore
 }
 #endregion
 
@@ -412,7 +453,7 @@ if($HealthChecker -and $ServerSettings) {
     if(Get-Item $ScriptPath\HealthChecker.ps1 -ErrorAction Ignore) {
         $HCPresent = $true
     } else {
-    $HCPresent = $false
+        $HCPresent = $false
     }
     try { Invoke-WebRequest -Uri "https://github.com/microsoft/CSS-Exchange/releases/latest/download/HealthChecker.ps1" -OutFile "$ScriptPath\HealthChecker.ps1"
     }
@@ -605,12 +646,14 @@ Write-Host -ForegroundColor Cyan "Collecting data now, please be patient. This w
 #region GetExchOrgSettings
 ## Collect Exchange organization settings
 if($OrgSettings) {
+    $OrgStartTime = Get-Date
     Write-Host -ForegroundColor Cyan "Starting data collection for Exchange organization settings..."
     ## Copy the discovery script to the Exchange server
     if($isExchangeServer) {
         Copy-Item "$ScriptPath\Get-ExchangeOrgDiscovery.ps1" -Destination "$env:ExchangeInstallPath\Scripts" -Force
         Unblock-File -Path "$env:ExchangeInstallPath\Scripts\Get-ExchangeOrgDiscovery.ps1" -Confirm:$false
         Invoke-ScriptBlockHandler -ScriptBlock $ExchangeOrgDiscovery -ComputerName $ComputerName | Out-Null
+        Check-OrgCollectionStarted
     }
     else {
         $s = Get-ExchangeServer $ExchangeServer
@@ -626,14 +669,16 @@ if($OrgSettings) {
                 $SearcherResult| ForEach-Object { [string]$exchInstallPath = $exchInstallPath+[System.Text.Encoding]::ASCII.GetString($_) }
             }
             else {$exchInstallPath = $SearcherResult}
+        Write-Verbose "Found install path for $ExchangeServer`: $SearcherResult"
         $orgResultPath = $exchInstallPath
         $OrgSession = New-PSSession -ComputerName $ExchangeServer -Credential $creds -Name SfMCOrgDiscovery -SessionOption $SessionOption
         Copy-Item "$ScriptPath\Get-ExchangeOrgDiscovery.ps1" -Destination "$exchInstallPath\Scripts" -Force -ToSession $OrgSession -ErrorAction Ignore
         ## Initiate the data collection on the Exchange server
-        Write-Verbose "Starting data collection for Exchange organization settings."
-        Invoke-ScriptBlockHandler -ScriptBlock $ExchangeOrgDiscovery -ComputerName $ExchangeServer -Credential $creds | Out-Null #-ArgumentList $creds 
         Write-Verbose "Unblocking the PowerShell script."
-        Invoke-ScriptBlockHandler -ScriptBlock {Unblock-File -Path "$env:ExchangeInstallPath\Scripts\Get-ExchangeOrgDiscovery.ps1" -Confirm:$false} -Credential $creds -ComputerName $ExchangeServer # -Session $OrgSession
+        Invoke-ScriptBlockHandler -ScriptBlock {Unblock-File -Path "$env:ExchangeInstallPath\Scripts\Get-ExchangeOrgDiscovery.ps1" -Confirm:$false} -Credential $creds -ComputerName $ExchangeServer
+        Write-Verbose "Starting data collection for Exchange organization settings."
+        Invoke-ScriptBlockHandler -ScriptBlock $ExchangeOrgDiscovery -ComputerName $ExchangeServer -Credential $creds | Out-Null
+        Check-OrgCollectionStarted
         Remove-PSSession -Name SfMCOrgDiscovery -ErrorAction Ignore
     }
 }       
@@ -642,6 +687,7 @@ if($OrgSettings) {
 #region GetExchServerSettings
 $ServerSettingsTimer = New-Object -TypeName System.Diagnostics.Stopwatch
 $ServerSettingsTimer.Start()
+$ServerStart = Get-Date
 if($ServerSettings) {
     Write-Host "Starting data collection on the Exchange servers..." -ForegroundColor Cyan
     $sAttempted = 0
@@ -654,7 +700,6 @@ if($ServerSettings) {
         Write-Progress -Activity "Exchange Discovery Assessment" -Status "Starting data collection on $($s.Name).....$PercentComplete% complete" -PercentComplete $PercentComplete
         if(Test-Connection -ComputerName $s.Fqdn -Count 2 -ErrorAction Ignore) {
             Write-Verbose "Getting Exchange install path for $($s.Name)."
-            #$s = Get-ExchangeServer $s.DistinguishedName
             $Filter = "(&(name=$($s.Name))(ObjectClass=msExchExchangeServer))"
             [string]$RootOU = $s.DistinguishedName
             $Searcher = New-Object DirectoryServices.DirectorySearcher
@@ -667,6 +712,7 @@ if($ServerSettings) {
                 $SearcherResult| ForEach-Object { [string]$exchInstallPath = $exchInstallPath+[System.Text.Encoding]::ASCII.GetString($_) }
             }
             else {$exchInstallPath = $SearcherResult}
+            Write-Verbose "Found install path for $($s.Name)`: $SearcherResult"
             #$exchInstallPath = (Get-ADObject -Filter "name -eq '$($s.Name)' -and ObjectClass -eq 'msExchExchangeServer'" -SearchBase $s.DistinguishedName -Properties msExchInstallPath -Server $s.OriginatingServer).msExchInstallPath
             ## Create an array to store paths for data retrieval
             if($exchInstallPath -notlike $null) {
@@ -680,6 +726,7 @@ if($ServerSettings) {
                     $exchInstallPath = "\\$($s.Fqdn)\$exchInstallPath"
                     try {
                         Copy-Item "$ScriptPath\Get-ExchangeServerDiscovery.ps1" -Destination "$exchInstallPath\Scripts" -Force -ErrorAction Ignore
+                        Write-Verbose "Get-ExchangeServerDiscovery script successfully copied to $s"
                     }
                     catch {
                         Write-Verbose "Failed to copy Get-ExchangeServerDiscovery script to $s"
@@ -687,6 +734,7 @@ if($ServerSettings) {
                     if($HealthChecker) { 
                         try {
                             Copy-Item "$ScriptPath\HealthChecker.ps1" -Destination "$exchInstallPath\Scripts" -Force -ErrorAction Ignore
+                            Write-Verbose "HealthChecker script successfully copied to $s"
                         }
                         catch {
                             Write-Verbose "Failed to copy HealthChecker script to $s"
@@ -698,11 +746,17 @@ if($ServerSettings) {
                     if($ServerSession) {
                         try {
                             Copy-Item "$ScriptPath\Get-ExchangeServerDiscovery.ps1" -Destination "$exchInstallPath\Scripts" -Force -ToSession $ServerSession -ErrorAction Ignore
+                            Write-Verbose "Get-ExchangeServerDiscovery script successfully copied to $s"
+                            Write-Verbose "Unblocking the script file on server $($s.Name)."
+                            Invoke-ScriptBlockHandler -ScriptBlock {Unblock-File -Path "$env:ExchangeInstallPath\Scripts\Get-ExchangeServerDiscovery.ps1" -Confirm:$false} -Credential $creds -ComputerName $s.fqdn -IsExchangeServer $isExchangeServer
                         }
                         catch {
                             Write-Verbose "Failed to copy Get-ExchangeServerDiscovery to $s"
                         }
-                        if($HealthChecker) { Copy-Item "$ScriptPath\HealthChecker.ps1" -Destination "$exchInstallPath\Scripts" -Force -ToSession $ServerSession } #-ErrorAction Ignore }
+                        if($HealthChecker) { 
+                            Copy-Item "$ScriptPath\HealthChecker.ps1" -Destination "$exchInstallPath\Scripts" -Force -ToSession $ServerSession 
+                            Write-Verbose "HealthChecker script successfully copied to $s"
+                        }
                         Remove-PSSession -Name SfMCSrvDis -ErrorAction Ignore
                     }
                     else {
@@ -712,9 +766,7 @@ if($ServerSettings) {
                 ## Initiate the data collection on the Exchange server
                 Write-Verbose "Starting data collection on the Exchange server $($s.Name)."
                 Invoke-ScriptBlockHandler -ScriptBlock $ExchangeServerDiscovery -ComputerName $s.Fqdn -ArgumentList $HealthChecker -Credential $creds -IsExchangeServer $isExchangeServer | Out-Null
-                Write-Verbose "Unblocking the script file on server $($s.Name)."
-                Invoke-ScriptBlockHandler -ScriptBlock {Unblock-File -Path "$env:ExchangeInstallPath\Scripts\Get-ExchangeServerDiscovery.ps1" -Confirm:$false} -Credential $creds -ComputerName $s.fqdn -IsExchangeServer $isExchangeServer
-                        
+                Check-ServerCollectionStarted
             }
             else {
                 Out-File $OutputPath\FailedServers.txt -InputObject "Unable to determine the Exchange install path on $s" -Append
@@ -730,21 +782,22 @@ if($ServerSettings) {
 
 #region PauseForDataCollection
 ## Wait 5 minutes from the start of script before attempting to retrieve the data
-$ServerSettingsTimer.Stop()
-$ServerRunTime = $ServerSettingsTimer.Elapsed.TotalSeconds
-if($ServerRunTime -lt 300) {
-    $TimeToWait = 300 - $ServerRunTime
-    if($TimeToWait -gt 1) {
-        $TimeRemaining = [math]::Round($TimeToWait)
-        Write-Verbose "Waiting $TimeRemaining before attempting data retrieval."
-        while($TimeRemaining -gt 0) {
-            Write-Progress -Activity "Exchange Discovery Assessment" -Status "Waiting for data collection to complete before attempting to retrive data... $TimeRemaining seconds remaining" -PercentComplete ((($TimeToWait-$TimeRemaining)/$TimeToWait)*100)
-            Start-Sleep -Seconds 1
-            $TimeRemaining = $TimeRemaining - 1
-        }
-    }
-}
+#$ServerSettingsTimer.Stop()
+#$ServerRunTime = $ServerSettingsTimer.Elapsed.TotalSeconds
+#if($ServerRunTime -lt 300) {
+#    $TimeToWait = 300 - $ServerRunTime
+#    if($TimeToWait -gt 1) {
+#        $TimeRemaining = [math]::Round($TimeToWait)
+#        Write-Verbose "Waiting $TimeRemaining before attempting data retrieval."
+#        while($TimeRemaining -gt 0) {
+#            Write-Progress -Activity "Exchange Discovery Assessment" -Status "Waiting for data collection to complete before attempting to retrive data... $TimeRemaining seconds remaining" -PercentComplete ((($TimeToWait-$TimeRemaining)/$TimeToWait)*100)
+#            Start-Sleep -Seconds 1
+#            $TimeRemaining = $TimeRemaining - 1
+#        }
+#    }
+#}
 #endregion
+
 
 #region CollectOrgResults
 if($OrgSettings) {
@@ -755,39 +808,67 @@ if($OrgSettings) {
         $OrgResultsAttempt++
         $sourcePath = $orgResultPath+"Logging\SfMC Discovery"
         if($isExchangeServer) {
-             if(Get-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\*OrgSettings*.zip" -ErrorAction Ignore) {
-                Write-Verbose "Attempting to copy Exchange org results to output location."
-                Copy-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\*OrgSettings*.zip" -Destination $OutputPath -Force -ErrorAction Ignore
-                Write-Verbose "Results found for Exchange organization settings."
-                Write-Host "FOUND" -ForegroundColor White
-                $OrgResultsFound = $true
-             }
+            #Check the event log to see if data collection completed
+            Write-Verbose "Checking if Exchange organization script completed on $($ExchangeServer)."
+            $TimeSpan = (New-TimeSpan -Start (Get-Date) -End $ServerStart).Minutes
+            $orgCompleted = Invoke-ScriptBlockHandler -ScriptBlock {param($NumberOfMinutes);Get-EventLog -LogName Application -Source "MSExchange ADAccess" -InstanceId 1007 -After (Get-Date -Date (Get-Date).AddMinutes($NumberOfMinutes) -Format "M/d/yyyy HH:mm") -ErrorAction Ignore} -ComputerName $ExchangeServer -Credential $creds -ArgumentList $TimeSpan -IsExchangeServer:$true
+            if($orgCompleted -notlike $null) {
+                Write-Verbose "Exchange organization script completed on $($ExchangeServer)."
+                Write-Verbose "Checking for Exchange organization results on $($ExchangeServer)."
+                if(Get-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\*OrgSettings*.zip" -ErrorAction Ignore) {
+                    Write-Verbose "Exchange organization results found on $($ExchangeServer)."
+                    Write-Verbose "Attempting to copy Exchange org results to output location."
+                    Copy-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\*OrgSettings*.zip" -Destination $OutputPath -Force -ErrorAction Ignore
+                    Write-Host "FOUND" -ForegroundColor White
+                    $OrgResultsFound = $true
+                }
+                else{
+                    Write-Verbose "Exchange organization results not found on $($ExchangeServer)."
+                }
+            }
+            else {
+                Write-Verbose "Exchange organization script has not completed on $($ExchangeServer)."
+            }
         }
         else {
-            $Session = New-PSSession -ComputerName $ExchangeServer -Credential $creds -Name OrgResults -SessionOption $SessionOption
-            Write-Verbose "Attempting to located Exchange organization results."
-            $orgResult = Invoke-ScriptBlockHandler -ScriptBlock {$orgFile = (Get-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\*OrgSettings*.zip").FullName; return $orgFile} -ComputerName $ExchangeServer -Credential $creds
-        
-            if($orgResult -notlike $null ) {
-                Write-Verbose "Attempting to copy Exchange org results to output location."
-                Copy-Item $orgResult -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore
-                Write-Verbose "Verifying Exchange org results were received."
-                if(Get-Item $OutputPath\*OrgSettings* -ErrorAction Ignore) { 
-                    Write-Host "FOUND" -ForegroundColor White
-                    Write-Verbose "Results found for Exchange organization settings."
-                    $OrgResultsFound = $true
-                    Write-Verbose "Removing scheduled task for Exchange org discovery."
-                    Invoke-ScriptBlockHandler -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeOrgDiscovery -Confirm:$False} -ComputerName $ExchangeServer -Credential $creds
-                    Remove-PSSession -Name OrgResults -ErrorAction Ignore -Confirm:$False
-                }                
-                else {
-                    Write-Verbose "Copy of Exchange organization results failed."
+            #Check the event log to see if data collection completed
+            Write-Verbose "Checking if Exchange organization script completed on $($ExchangeServer)."
+            $TimeSpan = (New-TimeSpan -Start (Get-Date) -End $ServerStart).Minutes
+            $orgCompleted = Invoke-ScriptBlockHandler -ScriptBlock {param($NumberOfMinutes);Get-EventLog -LogName Application -Source "MSExchange ADAccess" -InstanceId 1007 -After (Get-Date -Date (Get-Date).AddMinutes($NumberOfMinutes) -Format "M/d/yyyy HH:mm") -ErrorAction Ignore} -ComputerName $ExchangeServer -Credential $creds -ArgumentList $TimeSpan
+            if($orgCompleted -notlike $null) {
+                #Check for resulting zip file
+                Write-Verbose "Exchange organization script completed on $($ExchangeServer)."
+                Write-Verbose "Checking for Exchange organization results on $($ExchangeServer)."
+                $orgResult = Invoke-ScriptBlockHandler -ScriptBlock {$orgFile = (Get-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\*OrgSettings*.zip").FullName; return $orgFile} -ComputerName $ExchangeServer -Credential $creds
+                if($orgResult -notlike $null ) {
+                    $Session = New-PSSession -ComputerName $ExchangeServer -Credential $creds -Name OrgResults -SessionOption $SessionOption
+                    Write-Verbose "Attempting to copy Exchange organization results from $($ExchangeServer) to output location."
+                    Copy-Item $orgResult -Destination $OutputPath -Force -FromSession $Session -ErrorAction Ignore
+                    Write-Verbose "Verifying Exchange org results were received."
+                    if(Get-Item $OutputPath\*OrgSettings* -ErrorAction Ignore) { 
+                        Write-Host "FOUND" -ForegroundColor White
+                        Write-Verbose "Results found for Exchange organization settings."
+                        $OrgResultsFound = $true
+                        Write-Verbose "Removing scheduled task for Exchange org discovery."
+                        Invoke-ScriptBlockHandler -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeOrgDiscovery -Confirm:$False} -ComputerName $ExchangeServer -Credential $creds
+                        Remove-PSSession -Name OrgResults -ErrorAction Ignore -Confirm:$False
+                    }                
+                    else {
+                        Write-Verbose "Copy of Exchange organization results failed."
+                    }
                 }
+                else {
+                    Write-Verbose "Exchange organization results were not found on $($ExchangeServer)."
+                }
+            }
+            else {
+                Write-Verbose "Exchange organization script did not complete on $($ExchangeServer)."
             }
         }
         if($OrgResultsFound -eq $false) {
             Write-Verbose "Results for the Exchange organization discovery were not found."
             Write-Host "NOT FOUND" -ForegroundColor Red
+            Write-Host "Attempting to retrieve Exchange organization settings..." -ForegroundColor Cyan -NoNewline
             ## Wait x minutes before attempting to retrieve the data
             $TimeToWait = 120
             $TimeRemaining = $TimeToWait
@@ -816,13 +897,12 @@ if($ServerSettings){
     ## Attempt to retrieve the data multiple times
     while($ServerResultsAttempt -lt 4 -and $ServerResultsFound -eq $false) {
         $ServersNotFound = New-Object System.Collections.ArrayList
-
         ## Check for results and retrieve if missing
         [int]$sAttempted = 0
         Write-Verbose "Attempting to retrieve Exchange server setting results."
         Write-Host "Attempting to retrieve Exchange server settings..." -ForegroundColor Cyan -NoNewline
         foreach($s in $ExchangeServers) {
-                $CustomObject = New-Object -TypeName psobject
+            $CustomObject = New-Object -TypeName psobject
             $serverName = $s.ServerName
             $NetBIOSName= $ServerName.Substring(0, $ServerName.IndexOf("."))
             ## Check if server results have been received
@@ -840,34 +920,43 @@ if($ServerSettings){
                     $Session = New-PSSession -ComputerName $serverName -Credential $creds -Name ServerResults -SessionOption $SessionOption
                     $params.Add("FromSession",$Session) | Out-Null
                 }
-                Write-Verbose "Attempting to retrieve results from $($serverName)."
-                $serverResult = Invoke-ScriptBlockHandler -ScriptBlock {$serverFile = (Get-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\$env:COMPUTERNAME*.zip").FullName; return $serverFile} -ComputerName $serverName -Credential $creds -IsExchangeServer $isExchangeServer
-                if($serverResult -notlike $null) {
-                    Write-Verbose "Attempting to copy results from $ServerName."
-                    if($isExchangeServer) {
-                        $serverResult = $serverResult.Replace(":","$")
-                        $serverResult = "\\$serverName\$serverResult"
-                    }
-                    $params.Add("Path",$serverResult) | Out-Null
-                    Copy-Item @params
-                    ## Check if the results were found
-                    if(Get-Item $OutputPath\$NetBIOSName* -ErrorAction Ignore) {
-                        Write-Verbose "Results from $ServerName were received."
-                        $foundCount++
-                        Write-Verbose "Attempting to remove scheduled task from $($serverName)."
-                        Invoke-ScriptBlockHandler -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False} -ComputerName $serverName -Credential $creds -IsExchangeServer $isExchangeServer
-                        Remove-PSSession -Name ServerResults -ErrorAction Ignore -Confirm:$False
+                Write-Verbose "Checking if Exchange server discovery completed on $($serverName)."
+                #Check the event log to see if data collection completed
+                $TimeSpan = (New-TimeSpan -Start (Get-Date) -End $ServerStart).Minutes
+                $serverCompleted = Invoke-ScriptBlockHandler -ScriptBlock {param($NumberOfMinutes);Get-EventLog -LogName Application -Source "MSExchange ADAccess" -InstanceId 1376 -After (Get-Date -Date (Get-Date).AddMinutes($NumberOfMinutes) -Format "M/d/yyyy HH:mm") -ErrorAction Ignore} -ComputerName $ServerName -Credential $creds -ArgumentList $TimeSpan
+                if($serverCompleted -notlike $null) {
+                    #Now look for the results zip file
+                    $serverResult = Invoke-ScriptBlockHandler -ScriptBlock {$serverFile = (Get-Item "$env:ExchangeInstallPath\Logging\SfMC Discovery\$env:COMPUTERNAME*.zip").FullName; return $serverFile} -ComputerName $serverName -Credential $creds -IsExchangeServer $isExchangeServer
+                    if($serverResult -notlike $null) {
+                        Write-Verbose "Attempting to copy results from $ServerName."
+                        if($isExchangeServer) {
+                            $serverResult = $serverResult.Replace(":","$")
+                            $serverResult = "\\$serverName\$serverResult"
+                        }
+                        $params.Add("Path",$serverResult) | Out-Null
+                        Copy-Item @params
+                        #Check if the results were downloaded
+                        if(Get-Item $OutputPath\$NetBIOSName* -ErrorAction Ignore) {
+                            Write-Verbose "Results from $ServerName were received."
+                            $foundCount++
+                            Write-Verbose "Attempting to remove scheduled task from $($serverName)."
+                            Invoke-ScriptBlockHandler -ScriptBlock {Unregister-ScheduledTask -TaskName ExchangeServerDiscovery -Confirm:$False} -ComputerName $serverName -Credential $creds -IsExchangeServer $isExchangeServer
+                            Remove-PSSession -Name ServerResults -ErrorAction Ignore -Confirm:$False
+                        }
+                        else {
+                            Write-Verbose "Failed to copy results from $ServerName."
+                            $CustomObject | Add-Member -MemberType NoteProperty -Name "ServerName" -Value $s.ServerName -Force
+                            $CustomObject | Add-Member -MemberType NoteProperty -Name "ExchInstallPath" -Value $s.ExchInstallPath -Force
+                            $ServersNotFound.Add($CustomObject) | Out-Null
+                        }
                     }
                     else {
-                        Write-Verbose "Failed to copy results from $ServerName."
-                        $CustomObject | Add-Member -MemberType NoteProperty -Name "ServerName" -Value $s.ServerName -Force
-                        $CustomObject | Add-Member -MemberType NoteProperty -Name "ExchInstallPath" -Value $s.ExchInstallPath -Force
-                        $ServersNotFound.Add($CustomObject) | Out-Null
+                        Write-Verbose "Results not found on $ServerName."
                     }
                 }
                 ## Add server to array to check again
                 else {
-                    Write-Verbose "Results from $ServerName were not found. Adding to retry list."
+                    Write-Verbose "Script has not completed on $ServerName. Adding to retry list."
                     $CustomObject | Add-Member -MemberType NoteProperty -Name "ServerName" -Value $s.ServerName -Force
                     $CustomObject | Add-Member -MemberType NoteProperty -Name "ExchInstallPath" -Value $s.ExchInstallPath -Force
                     $ServersNotFound.Add($CustomObject) | Out-Null
