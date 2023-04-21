@@ -1,14 +1,15 @@
 ﻿<#//***********************************************************************
 //
 // Get-ExchangeServerDiscovery.ps1
-// Modified 23 August 2022
+// Modified 21 April 2023
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// Version: v20220823.1654
+// Version: v20230421.1909
 //
 //.NOTES
 // 4.2 Adds the HealthChecker script data collection
 // 20220823.1654 - Additional logging and option to run HealthChecker
+// 20230421.1909 - Write event logs for start and finish
 //
 //***********************************************************************
 //
@@ -274,6 +275,7 @@ function Zip-CsvResults {
     }
 }
 
+Write-EventLog -LogName Application -Source "MSExchange ADAccess" -EntryType Information -EventId 1031 -Message "The SfMC Exchange Server discovery script has started." -Category 1
 ## Set the destination for the data collection output
 $outputPath = "$env:ExchangeInstallPath\Logging\SfMC Discovery\Server Settings"
 if(!(Test-Path $outputPath)) {
@@ -406,6 +408,7 @@ $zipAttempt = 0
 while($zipReady -eq $false) {
     if(Get-Item -Path $zipFolder -ErrorAction Ignore) { 
         Write-Verbose "Compression completed successfully."
+        Write-EventLog -LogName Application -Source "MSExchange ADAccess" -EntryType Information -EventId 1376 -Message "The SfMC Exchange server discovery script has completed." -Category 1
         $zipReady = $true }
     else {
         Write-Verbose "Compression attempt failed."

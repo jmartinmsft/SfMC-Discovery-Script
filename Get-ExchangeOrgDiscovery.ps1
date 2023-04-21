@@ -1,13 +1,14 @@
 ﻿<#//***********************************************************************
 //
 // Get-ExchangeOrgDiscovery.ps1
-// Modified 23 August 2022
+// Modified 21 April 2023
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// Version: v20220823.0838
+// Version: v20230421.1909
 //
 //.NOTES
-// 20220823.1655 - Additional logging 
+// 20220823.1655 - Additional logging
+// 20230421.1909 - Write event logs for start and finish
 //
 //***********************************************************************
 //
@@ -231,7 +232,7 @@ function Invoke-CatchActionError {
         & $CatchActionFunction
     }
 }
-
+Write-EventLog -LogName Application -Source "MSExchange ADAccess" -EntryType Information -EventId 1125 -Message "The SfMC Exchange Organization discovery script has started." -Category 1
 $ServerName = $env:COMPUTERNAME
 #region OutputPath
 ## Set the destination for the data collection output
@@ -349,6 +350,7 @@ while($zipReady -eq $false) {
     if(Get-Item -Path $zipFolder -ErrorAction Ignore) { 
         $zipReady = $true 
         Write-Verbose "Compression completed successfully."
+        Write-EventLog -LogName Application -Source "MSExchange ADAccess" -EntryType Information -EventId 1007 -Message "The SfMC Exchange Organization discovery script has completed." -Category 1
     }
     else {
         Start-Sleep -Seconds 10
@@ -360,6 +362,7 @@ while($zipReady -eq $false) {
         }
     }
 }
+
 
 # SIG # Begin signature block
 # MIInpAYJKoZIhvcNAQcCoIInlTCCJ5ECAQExDzANBglghkgBZQMEAgEFADB5Bgor
