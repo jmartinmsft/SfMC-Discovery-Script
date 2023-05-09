@@ -810,7 +810,10 @@ if($OrgSettings) {
         if($isExchangeServer) {
             #Check the event log to see if data collection completed
             Write-Verbose "Checking if Exchange organization script completed on $($ExchangeServer)."
-            $TimeSpan = (New-TimeSpan -Start (Get-Date) -End $ServerStart).Minutes
+            $EndTime = Get-Date
+            $TimeSpanMinutes = (New-TimeSpan -Start ($EndTime) -End $ServerStart).Minutes
+            $TimeSpanHours = (New-TimeSpan -Start ($EndTime) -End $ServerStart).Hours
+            $TimeSpan = ($TimeSpanHours*60) + $TimeSpanMinutes
             $orgCompleted = Invoke-ScriptBlockHandler -ScriptBlock {param($NumberOfMinutes);Get-EventLog -LogName Application -Source "MSExchange ADAccess" -InstanceId 1007 -After (Get-Date -Date (Get-Date).AddMinutes($NumberOfMinutes) -Format "M/d/yyyy HH:mm") -ErrorAction Ignore} -ComputerName $ExchangeServer -Credential $creds -ArgumentList $TimeSpan -IsExchangeServer:$true
             if($orgCompleted -notlike $null) {
                 Write-Verbose "Exchange organization script completed on $($ExchangeServer)."
@@ -833,7 +836,11 @@ if($OrgSettings) {
         else {
             #Check the event log to see if data collection completed
             Write-Verbose "Checking if Exchange organization script completed on $($ExchangeServer)."
-            $TimeSpan = (New-TimeSpan -Start (Get-Date) -End $ServerStart).Minutes
+            $EndTime = Get-Date
+            $TimeSpanMinutes = (New-TimeSpan -Start ($EndTime) -End $ServerStart).Minutes
+            $TimeSpanHours = (New-TimeSpan -Start ($EndTime) -End $ServerStart).Hours
+            $TimeSpan = ($TimeSpanHours*60) + $TimeSpanMinutes
+            #$TimeSpan = (New-TimeSpan -Start (Get-Date) -End $ServerStart).Minutes
             $orgCompleted = Invoke-ScriptBlockHandler -ScriptBlock {param($NumberOfMinutes);Get-EventLog -LogName Application -Source "MSExchange ADAccess" -InstanceId 1007 -After (Get-Date -Date (Get-Date).AddMinutes($NumberOfMinutes) -Format "M/d/yyyy HH:mm") -ErrorAction Ignore} -ComputerName $ExchangeServer -Credential $creds -ArgumentList $TimeSpan
             if($orgCompleted -notlike $null) {
                 #Check for resulting zip file
@@ -922,7 +929,11 @@ if($ServerSettings){
                 }
                 Write-Verbose "Checking if Exchange server discovery completed on $($serverName)."
                 #Check the event log to see if data collection completed
-                $TimeSpan = (New-TimeSpan -Start (Get-Date) -End $ServerStart).Minutes
+                $EndTime = Get-Date
+            $TimeSpanMinutes = (New-TimeSpan -Start ($EndTime) -End $ServerStart).Minutes
+            $TimeSpanHours = (New-TimeSpan -Start ($EndTime) -End $ServerStart).Hours
+            $TimeSpan = ($TimeSpanHours*60) + $TimeSpanMinutes
+                #$TimeSpan = (New-TimeSpan -Start (Get-Date) -End $ServerStart).Minutes
                 $serverCompleted = Invoke-ScriptBlockHandler -ScriptBlock {param($NumberOfMinutes);Get-EventLog -LogName Application -Source "MSExchange ADAccess" -InstanceId 1376 -After (Get-Date -Date (Get-Date).AddMinutes($NumberOfMinutes) -Format "M/d/yyyy HH:mm") -ErrorAction Ignore} -ComputerName $ServerName -Credential $creds -ArgumentList $TimeSpan
                 if($serverCompleted -notlike $null) {
                     #Now look for the results zip file
