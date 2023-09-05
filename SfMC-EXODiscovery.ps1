@@ -139,7 +139,7 @@ function Invoke-ExchangeCmdlet {
 }
 
 
-function Is-Admin {    
+function PowerShellRoleCheck {    
     $currentPrincipal = New-Object Security.Principal.WindowsPrincipal( [Security.Principal.WindowsIdentity]::GetCurrent() )
     if($currentPrincipal.IsInRole( [Security.Principal.WindowsBuiltInRole]::Administrator )) {
         LogVerbose "PowerShell is running 'as Administrator'."
@@ -151,7 +151,7 @@ function Is-Admin {
     }
 }
 
-if(-not (Is-Admin)) {
+if(-not (PowerShellRoleCheck)) {
 	Write-Warning "The SfMC-Exchange-Discovery-1.ps1 script needs to be executed in elevated mode. Please start PowerShell 'as Administrator' and try again." 
 	Start-Sleep -Seconds 2;
 	exit
