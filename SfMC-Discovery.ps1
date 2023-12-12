@@ -431,8 +431,10 @@ if($HealthChecker -and $ServerSettings) {
     } else {
         $HCPresent = $false
     }
-    $script:LastError = $Error[0]
-    try { Invoke-WebRequest -Uri "https://github.com/microsoft/CSS-Exchange/releases/latest/download/HealthChecker.ps1" -OutFile "$ScriptPath\HealthChecker.ps1"
+    $Error.Clear()
+    try {
+        Invoke-WebRequest -Uri "https://github.com/microsoft/CSS-Exchange/releases/latest/download/HealthChecker.ps1" -OutFile "$ScriptPath\HealthChecker.ps1"
+        $HCPresent = $true
     }
     catch {}
     ErrorReported "DownloadHealthChecker"

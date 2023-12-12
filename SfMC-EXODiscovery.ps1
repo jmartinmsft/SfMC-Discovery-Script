@@ -1,10 +1,10 @@
 ﻿<#//***********************************************************************
 //
 // SfMC-EXODiscovery.ps1
-// Modified 05 September 2023
+// Modified 28 November 2023
 // Last Modifier:  Jim Martin
 // Project Owner:  Jim Martin
-// Version: 20230905.0819
+// Version: 20231128.1454
 //Syntax for running this script:
 //
 // .\SfMC-EXODiscovery.ps1 -UserPrincipalName admin@contoso.com -OutputPath C:\Temp\Results
@@ -12,6 +12,7 @@
 //.NOTES
 // 1.1 Updated EOP data collection
 // 20230905.1418 Updated error handling and removed cmdlet requiring RPSSession
+// 20231128.1454 Added inbound connector settings
 //
 //***********************************************************************
 //
@@ -53,7 +54,7 @@ Write-Host $ScriptDisclaimer -ForegroundColor Yellow
 #Start-Sleep -Seconds 2
 #endregion
 
-$script:ScriptVersion = "20230905.1418"
+$script:ScriptVersion = "20231128.1454"
 
 function LogToFile([string]$Details) {
 	if ( [String]::IsNullOrEmpty($LogFile) ) { return }
@@ -263,6 +264,7 @@ Invoke-ExchangeCmdlet -Cmdlet Get-MobileDeviceMailboxPolicy -CsvOutputPath $outp
 Invoke-ExchangeCmdlet -Cmdlet Get-OMEConfiguration -CsvOutputPath $outputPath\$orgName-OMEConfiguration.csv
 Invoke-ExchangeCmdlet -Cmdlet Get-OrganizationConfig -CsvOutputPath $outputPath\$orgName-OrganizationConfig.csv
 Invoke-ExchangeCmdlet -Cmdlet Get-OrganizationRelationship -CsvOutputPath $outputPath\$orgName-OrganizationRelationship.csv
+Invoke-ExchangeCmdlet -Cmdlet Get-InboundConnector -CsvOutputPath $outputPath\$orgName-InboundConnector.csv
 Invoke-ExchangeCmdlet -Cmdlet Get-OutboundConnector -CsvOutputPath $outputPath\$orgName-OutboundConnector.csv
 Invoke-ExchangeCmdlet -Cmdlet Get-OutlookProtectionRule -CsvOutputPath $outputPath\$orgName-OutlookProtectionRule.csv
 Invoke-ExchangeCmdlet -Cmdlet Get-OwaMailboxPolicy -CsvOutputPath $outputPath\$orgName-OwaMailboxPolicy.csv
