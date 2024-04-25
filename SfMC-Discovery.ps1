@@ -274,7 +274,7 @@ function CheckRunningFromExchangeServer {
     if($adDomain -notlike $null) {
         try {
             $exchContainer = Get-ADObject -LDAPFilter "(objectClass=msExchConfigurationContainer)" -SearchBase "CN=Services,CN=Configuration,$adDomain" -SearchScope OneLevel -ErrorAction Ignore
-            if(Get-ADObject -Filter 'objectClass -eq "msExchExchangeServer" -and name -eq $ComputerName' -SearchBase $exchContainer -SearchScope Subtree -ErrorAction Ignore) {
+            if(Get-ADObject -Filter "objectClass -eq 'msExchExchangeServer' -and name -eq '$($ComputerName)'" -SearchBase $exchContainer -SearchScope Subtree -ErrorAction Ignore) {
                 $isExchangeServer = $true
                 LogVerbose([string]::Format("Found Exchange server with the name {0}.", $ComputerName))
             }
