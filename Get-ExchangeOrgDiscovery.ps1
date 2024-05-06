@@ -633,7 +633,7 @@ $ScriptDisclaimer = @"
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //
-//**********************************************************************​
+//***********************************************************************
 "@
 Write-Host $ScriptDisclaimer -ForegroundColor Yellow
 #endregion
