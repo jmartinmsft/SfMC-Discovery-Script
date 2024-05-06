@@ -1,42 +1,33 @@
-﻿<#//***********************************************************************
-//
-// Post-SfMCDiscovery.ps1
-// Modified 24 May 2023
-// Last Modifier:  Jim Martin
-// Project Owner:  Jim Martin
-// Version: v1.2
-//
-//.NOTES
-// 1.1 Adds the HealthChecker script data collection
-// 1.2 Fixes issue merging DAG network data
-//
-//***********************************************************************
-//
-// Copyright (c) 2018 Microsoft Corporation. All rights reserved.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-//
-//**********************************************************************​
+﻿<#
+    MIT License
+
+    Copyright (c) Microsoft Corporation.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE
 #>
+# Version 20240506.1338
+
 param(
-    [Parameter(Mandatory=$false)] [string]$OutputPath
+    [Parameter(Mandatory=$false)] [string]$DiscoveryZipFile,
+    [Parameter(Mandatory=$false,HelpMessage="The OutputPath parameter specifies the directory where the results are written")] [ValidateScript( {Test-Path $_})][string]$OutputPath
 )
-function Get-FolderPath {   
-    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
-    $folderBrowser.Description = "Select the location"
-    $folderBrowser.SelectedPath = "C:\"
-    $folderPath = $folderBrowser.ShowDialog()
-    [string]$oPath = $folderBrowser.SelectedPath
-    return $oPath
-}
-## Work with discovery data
-Clear-Host
+
 #region Disclaimer
 Write-Host -ForegroundColor Yellow '//***********************************************************************'
 Write-Host -ForegroundColor Yellow '//'
@@ -52,113 +43,138 @@ Write-Host -ForegroundColor Yellow '// THE SOFTWARE.'
 Write-Host -ForegroundColor Yellow '//'
 Write-Host -ForegroundColor Yellow '//**********************************************************************​'
 #endregion
-Add-Type -AssemblyName System.Windows.Forms
+
+$Date = (Get-Date).ToString("yyyyMMddhhmmss")
 # Determine the current location which will be used to store the results
-[boolean]$validPath = $false
-while($validPath -eq $false) {
-    if($OutputPath -like $null) {
-        Write-Host "Select the location for the customer results." -ForegroundColor Yellow
-        $OutputPath = Get-FolderPath
-    }
-    else {
-        if($OutputPath.Substring($OutputPath.Length-1,1) -eq "\") {$OutputPath = $OutputPath.Substring(0,$OutputPath.Length-1)}
-    }
-    if(Test-Path -Path $OutputPath) {$validPath = $true}
-    else {
-        Write-Warning "An invalid path for the output was provided. Please select the location."
-        Start-Sleep -Seconds 3
-        $OutputPath = Get-FolderPath
-    }
+if([string]::IsNullOrEmpty($OutputPath)) {
+    $OutputPath = $DiscoveryZipFile.Substring(0, $DiscoveryZipFile.IndexOf("DiscoveryResults"))
 }
+
+$ScriptDisclaimer = @"
+//***********************************************************************
+//
+// The SfMC Email Discovery process is about to begin processing data.
+// It will take some time to complete depending on the customer environment.
+//
+//**********************************************************************​
+"@
+Write-Host $ScriptDisclaimer -ForegroundColor Cyan
+
 ## Set a timer
-Write-host " "
-Write-host -ForegroundColor Cyan "==============================================================================="
-Write-host " "
-Write-Host -ForegroundColor Cyan " The SfMC Email Discovery process is about to begin processing data. "
-Write-host -ForegroundColor Cyan " It will take some time to complete depending on the customer environment. "
-Write-host " "
-Write-host -ForegroundColor Cyan "==============================================================================="
-Write-host " "
-Start-Sleep -Seconds 3
 $stopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
 $stopWatch.Start()
-Get-ChildItem -Path $OutputPath -Filter *.zip | Select FullName,Name | ForEach-Object {
+
+#region ExpandDiscoveryResults
+try{
+    $Results = Expand-Archive -Path $DiscoveryZipFile -PassThru -Confirm:$false -DestinationPath $OutputPath -Force
+    $ExpandFolderPath = $Results.DirectoryName[0]
+}
+catch{
+    Write-Host "Failed to unzip the Discovery results." -ForegroundColor Red
+    exit
+}
+#endregion
+
+#region ExpandOrgAndServerResults
+$ServerResultsPath = New-Item -Path $ExpandFolderPath -Name ServerResults -ItemType Directory
+$OrgResultsPath = New-Item -Path $ExpandFolderPath -Name OrgResults -ItemType Directory
+
+Get-ChildItem -Path $ExpandFolderPath -Filter *.zip | ForEach-Object {
     if($_.Name -notlike "*OrgSettings*") {
-        $serverName = $_.Name.Substring(0,$_.Name.IndexOf("-Settings"))
-        $serverPath = $null
-        $serverPath = "$outputPath\$serverName"
-        try{Expand-Archive -Path $_.FullName -DestinationPath $serverPath -ErrorAction Stop -Force}
-        catch{$zipName = $_.FullName
-            Write-Warning "Unable to extract $zipName."
+        $ServerName = $_.Name.Substring(0,$_.Name.IndexOf("-Settings"))
+        $ServerPath = New-Item -Path $ServerResultsPath.FullName -Name $ServerName -ItemType Directory
+        try{
+            Expand-Archive -Path $_.FullName -DestinationPath $ServerPath.FullName -Confirm:$false -ErrorAction Stop -Force
+        }
+        catch{
+            Write-Warning "Unable to extract $($_.FullName)."
+        }
+    }
+    else {
+        try{
+            Expand-Archive -Path $_.FullName -DestinationPath $OrgResultsPath.FullName -Confirm:$false -Force
+        }
+        catch{
+            Write-Host "Failed to expand the organization results." -ForegroundColor Red
         }
     }
 }
-Write-host " "
-Write-host -ForegroundColor Cyan "==============================================================================="
-Write-host " "
-Write-Host -ForegroundColor Cyan " The SfMC Email Discovery is merging the CSV data. "
-Write-host " "
-Write-host -ForegroundColor Cyan "==============================================================================="
-Write-host " "
-Get-ChildItem $outputPath -Filter *ActiveSyncVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ActiveSyncVirtualDirectory.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *AutodiscoverVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\AutodiscoverVirtualDirectory.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *Bios.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\Bios.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *ClientAccessServer.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ClientAccessServer.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *ComputerSystem.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ComputerSystem.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *CrashControl.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\CrashControl.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *Culture.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\Culture.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *DatabaseAvailabilityGroup.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Name | Export-Csv $outputPath\DatabaseAvailabilityGroup.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *DatabaseAvailabilityGroupNetwork.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Identity | Export-Csv $outputPath\DatabaseAvailabilityGroupNetwork.csv -NoTypeInformation -Append -Force
-Get-ChildItem $outputPath -Filter *Disk.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\Disk.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *EcpVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\EcpVirtualDirectory.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *EventLogLevel.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\EventLogLevel.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *ExchangeCertificate.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Name | Export-Csv $outputPath\ExchangeCertificate.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *ExchangeServer.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ExchangeServer.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *FrontendTransportService.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\FrontendTransportService.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *HotFix.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\HotFix.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *ImapSettings.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ImapSettings.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *LogFile.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\LogFile.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *LogicalDisk.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\LogicalDisk.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *MailboxDatabase.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Name | Export-Csv $outputPath\MailboxDatabase.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *MailboxServer.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\MailboxServer.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *MailboxTransportService.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\MailboxTransportService.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *MapiVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\MapiVirtualDirectory.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *Memory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\Memory.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *NetAdapter.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\NetAdapter.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *NetIPAddress.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\NetIPAddress.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *NetOffloadGlobalSetting.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\NetOffloadGlobalSetting.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *NetRoute.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\NetRoute.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *OabVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\OabVirtualDirectory.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *OperatingSystem.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\OperatingSystem.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *OutlookAnywhere.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\OutlookAnywhere.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *OwaVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\OwaVirtualDirectory.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *Partition.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\Partition.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *PopSettings.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\PopSettings.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *PowerShellVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\PowerShellVirtualDirectory.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *Processor.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\Processor.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *Product.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\Product.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *RpcClientAccess.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\RpcClientAccess.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *ReceiveConnector.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ReceiveConnector.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *ScheduledTask.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ScheduledTask.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *ServerComponentState.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ServerComponentState.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *ServerHealth.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\ServerHealth.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *-Service.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\Service.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *TransportAgent.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\TransportAgent.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *TransportPipeline.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\TransportPipeline.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *-TransportService.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\TransportService.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *WebServicesVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\WebServicesVirtualDirectory.csv -NoTypeInformation -Append
-Get-ChildItem $outputPath -Filter *WindowsFeature.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv $outputPath\WindowsFeature.csv -NoTypeInformation -Append
-if(!(Get-Item $OutputPath\HealthChecker -ErrorAction Ignore)){
-    New-Item -Path $OutputPath\HealthChecker -ItemType Directory | Out-Null
+#endregion
+
+Get-ChildItem -Path $ServerResultsPath.FullName -Directory | ForEach-Object {
+    $CsvPath = New-Item -Path $_.FullName -Name CsvFiles -ItemType Directory
+    Get-ChildItem -Path $_.FullName -Filter *.xml | ForEach-Object {
+        Import-Clixml $_.FullName | Export-Csv "$($CsvPath.FullName)\$($_.BaseName).csv" -NoTypeInformation -Force
+    }
 }
-Get-ChildItem $OutputPath -Filter HealthChecker*.xml -Recurse | Select-Object -ExpandProperty FullName | Move-Item -Destination $OutputPath\HealthChecker -Confirm:$False -Force
-.\HealthChecker.ps1 -XMLDirectoryPath $OutputPath\HealthChecker -BuildHtmlServersReport
+
+$ScriptDisclaimer = @"
+//***********************************************************************
+//
+// The SfMC Email Discovery is merging the CSV data.
+//
+//**********************************************************************​
+"@
+Write-Host $ScriptDisclaimer -ForegroundColor Cyan
+
+Get-ChildItem $ServerResultsPath.FullName -Filter *ActiveSyncVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\ActiveSyncVirtualDirectory.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *AutodiscoverVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\AutodiscoverVirtualDirectory.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *Bios.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\Bios.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *ClientAccessServer.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\ClientAccessServer.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *ComputerSystem.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\ComputerSystem.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *CrashControl.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\CrashControl.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *Culture.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\Culture.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *DatabaseAvailabilityGroup.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Name | Export-Csv "$($ServerResultsPath.FullName)\DatabaseAvailabilityGroup.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *DatabaseAvailabilityGroupNetwork.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Identity | Export-Csv "$($ServerResultsPath.FullName)\DatabaseAvailabilityGroupNetwork.csv" -NoTypeInformation -Append -Force
+Get-ChildItem $ServerResultsPath.FullName -Filter *Disk.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\Disk.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *EcpVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\EcpVirtualDirectory.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *EventLogLevel.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\EventLogLevel.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *ExchangeCertificate.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Name | Export-Csv "$($ServerResultsPath.FullName)\ExchangeCertificate.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *ExchangeServer.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\ExchangeServer.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *FrontendTransportService.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\FrontendTransportService.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *HotFix.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\HotFix.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *ImapSettings.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\ImapSettings.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *LogFile.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\LogFile.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *LogicalDisk.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\LogicalDisk.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *MailboxDatabase.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Sort-Object -Unique -Property Name | Export-Csv "$($ServerResultsPath.FullName)\MailboxDatabase.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *MailboxServer.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\MailboxServer.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *MailboxTransportService.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\MailboxTransportService.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *MapiVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\MapiVirtualDirectory.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *Memory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\Memory.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *NetAdapter.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\NetAdapter.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *NetIPAddress.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\NetIPAddress.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *NetOffloadGlobalSetting.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\NetOffloadGlobalSetting.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *NetRoute.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\NetRoute.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *OabVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\OabVirtualDirectory.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *OperatingSystem.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\OperatingSystem.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *OutlookAnywhere.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\OutlookAnywhere.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *OwaVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\OwaVirtualDirectory.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *Partition.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\Partition.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *PopSettings.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\PopSettings.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *PowerShellVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\PowerShellVirtualDirectory.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *Processor.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\Processor.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *Product.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\Product.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *RpcClientAccess.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\RpcClientAccess.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *ReceiveConnector.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\ReceiveConnector.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *ScheduledTask.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\ScheduledTask.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *ServerComponentState.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\ServerComponentState.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *ServerHealth.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\ServerHealth.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *-Service.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\Service.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *TransportAgent.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\TransportAgent.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *TransportPipeline.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\TransportPipeline.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *-TransportService.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\TransportService.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *WebServicesVirtualDirectory.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\WebServicesVirtualDirectory.csv" -NoTypeInformation -Append
+Get-ChildItem $ServerResultsPath.FullName -Filter *WindowsFeature.csv -Recurse | Select-Object -ExpandProperty FullName | Import-Csv | Export-Csv "$($ServerResultsPath.FullName)\WindowsFeature.csv" -NoTypeInformation -Append
 
 $stopWatch.Stop()
 $totalTime = $stopWatch.Elapsed.TotalSeconds
-Write-host " "
-Write-host -ForegroundColor Cyan  "==================================================="
-Write-Host -ForegroundColor Cyan " SfMC Email Discovery data processing has finished!"
-Write-Host -ForegroundColor Cyan "          Total time: $($totalTime) seconds"
-Write-host -ForegroundColor Cyan "==================================================="
-Write-host " "
+
+$ScriptDisclaimer = @"
+//***********************************************************************
+//
+// SfMC Email Discovery data processing has finished!"
+//         Total time: $($totalTime) seconds
+//
+//**********************************************************************​
+"@
+Write-Host $ScriptDisclaimer -ForegroundColor Cyan

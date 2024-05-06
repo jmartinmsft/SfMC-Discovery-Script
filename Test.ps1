@@ -1,4 +1,4 @@
-﻿<#
+<#
     MIT License
 
     Copyright (c) Microsoft Corporation.
@@ -15,13 +15,13 @@
 
     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
     IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THEa
     AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE
 #>
-# Version 20240506.1338
+# Version 20240503.1822
 param(
     [Parameter(Mandatory=$true,HelpMessage="The ExchangeServer parameter specifies the Exchange server for the remote PowerShell session")] [string]$ExchangeServer,
     [Parameter(Mandatory=$false,HelpMessage="The Credential parameter specifies the Exchange administrator credentials used for data collection")] [pscredential]$Credential,
@@ -177,6 +177,7 @@ function Test-ADCredentials {
     }
 }
 
+
 function Invoke-CatchActionErrorLoop {
     [CmdletBinding()]
     param(
@@ -197,8 +198,36 @@ function Invoke-CatchActionErrorLoop {
     }
 }
 
+function SetProperForegroundColor {
+    $Script:OriginalConsoleForegroundColor = $host.UI.RawUI.ForegroundColor
+
+    if ($Host.UI.RawUI.ForegroundColor -eq $Host.PrivateData.WarningForegroundColor) {
+        Write-Verbose "Foreground Color matches warning's color"
+
+        if ($Host.UI.RawUI.ForegroundColor -ne "Gray") {
+            $Host.UI.RawUI.ForegroundColor = "Gray"
+        }
+    }
+
+    if ($Host.UI.RawUI.ForegroundColor -eq $Host.PrivateData.ErrorForegroundColor) {
+        Write-Verbose "Foreground Color matches error's color"
+
+        if ($Host.UI.RawUI.ForegroundColor -ne "Gray") {
+            $Host.UI.RawUI.ForegroundColor = "Gray"
+        }
+    }
+}
+
+function RevertProperForegroundColor {
+    $Host.UI.RawUI.ForegroundColor = $Script:OriginalConsoleForegroundColor
+}
+
 function SetWriteHostAction ($DebugAction) {
     $Script:WriteHostDebugAction = $DebugAction
+}
+
+function SetWriteHostManipulateObjectAction ($ManipulateObject) {
+    $Script:WriteHostManipulateObjectAction = $ManipulateObject
 }
 
 function Write-Verbose {
@@ -233,6 +262,14 @@ function SetWriteVerboseAction ($DebugAction) {
     $Script:WriteVerboseDebugAction = $DebugAction
 }
 
+function SetWriteRemoteVerboseAction ($DebugAction) {
+    $Script:WriteRemoteVerboseDebugAction = $DebugAction
+}
+
+function SetWriteVerboseManipulateMessageAction ($DebugAction) {
+    $Script:WriteVerboseManipulateMessageAction = $DebugAction
+}
+
 function Write-Warning {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidOverwritingBuiltInCmdlets', '', Justification = 'In order to log Write-Warning from Shared functions')]
     [CmdletBinding()]
@@ -265,6 +302,14 @@ function Write-Warning {
 
 function SetWriteWarningAction ($DebugAction) {
     $Script:WriteWarningDebugAction = $DebugAction
+}
+
+function SetWriteRemoteWarningAction ($DebugAction) {
+    $Script:WriteRemoteWarningDebugAction = $DebugAction
+}
+
+function SetWriteWarningManipulateMessageAction ($DebugAction) {
+    $Script:WriteWarningManipulateMessageAction = $DebugAction
 }
 
 function Get-NewLoggerInstance {
@@ -361,6 +406,23 @@ function Write-LoggerInstance {
     }
 }
 
+function Invoke-LoggerInstanceCleanup {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [object]$LoggerInstance
+    )
+    process {
+        if ($LoggerInstance.LoggerDisabled -or
+            $LoggerInstance.PreventLogCleanup) {
+            return
+        }
+
+        Get-ChildItem -Path ([System.IO.Path]::GetDirectoryName($LoggerInstance.FullPath)) -Filter "*$($LoggerInstance.BaseInstanceFileName)*" |
+            Remove-Item -Force
+    }
+}
+
 function Invoke-CatchActionError {
     [CmdletBinding()]
     param(
@@ -412,6 +474,14 @@ function Write-VerboseErrorInformation {
         [object]$CurrentError = $Error[0]
     )
     WriteErrorInformationBase $CurrentError "Write-Verbose"
+}
+
+function Write-HostErrorInformation {
+    [CmdletBinding()]
+    param(
+        [object]$CurrentError = $Error[0]
+    )
+    WriteErrorInformationBase $CurrentError "Write-Host"
 }
 
 function Confirm-ExchangeShell {
@@ -835,7 +905,6 @@ elseif ($credentialTestResult.CredentialsValid -eq $false) {
     exit
 } else {
     Write-Host "Credentials couldn't be validated. Trying to use the credentials anyway." -ForegroundColor Yellow
-    exit
 }
 #endregion
 
