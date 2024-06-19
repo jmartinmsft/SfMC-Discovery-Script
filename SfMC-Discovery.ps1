@@ -21,7 +21,7 @@
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE
 #>
-# Version 20240506.1338
+# Version 20240619.1355
 param(
     [Parameter(Mandatory=$true,HelpMessage="The ExchangeServer parameter specifies the Exchange server for the remote PowerShell session")] [string]$ExchangeServer,
     [Parameter(Mandatory=$false,HelpMessage="The Credential parameter specifies the Exchange administrator credentials used for data collection")] [pscredential]$Credential,
@@ -96,6 +96,9 @@ function Test-ADCredentials {
         [System.Management.Automation.PSCredential]$Credentials,
 
         [Parameter(Mandatory = $false)]
+        [string]$Domain=$null,
+
+        [Parameter(Mandatory = $false)]
         [ScriptBlock]$CatchActionFunction
     )
 
@@ -120,7 +123,9 @@ function Test-ADCredentials {
         }
     }
     process {
-        $domain = $Credentials.GetNetworkCredential().Domain
+        if([string]::IsNullOrEmpty($Domain)) {
+            $domain = $Credentials.GetNetworkCredential().Domain
+        }
         if ([System.String]::IsNullOrEmpty($domain)) {
             Write-Verbose "Domain is empty which could be an indicator that UPN was passed instead of domain\username"
             $domain = ($Credentials.GetNetworkCredential().UserName).Split("@")
@@ -153,7 +158,11 @@ function Test-ADCredentials {
                     # ErrorCode 49 means invalid credentials
                     Write-Verbose "Failed to connect to LDAP server with credentials provided"
                     $credentialsValid = $false
-                } else {
+                } elseif ($_.Exception.ErrorCode -eq 84) {
+                    Write-Verbose "Failed to connect to LDAP server using UPN domain"
+                    Test-ADCredentials -Credentials $Credentials -Domain $env:USERDNSDOMAIN
+                }
+                else {
                     Write-Verbose "Failed to connect to LDAP server for other reason"
                     Write-Verbose "ErrorCode: $($_.Exception.ErrorCode)"
                 }

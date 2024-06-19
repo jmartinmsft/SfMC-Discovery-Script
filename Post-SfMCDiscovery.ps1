@@ -66,7 +66,7 @@ Write-Host $ScriptDisclaimer -ForegroundColor Cyan
 ## Set a timer
 $stopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
 $stopWatch.Start()
-
+Unblock-File -Path $DiscoveryZipFile -Confirm:$false
 #region ExpandDiscoveryResults
 try{
     $Results = Expand-Archive -Path $DiscoveryZipFile -PassThru -Confirm:$false -DestinationPath $OutputPath -Force
