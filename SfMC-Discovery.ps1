@@ -158,7 +158,7 @@ function Test-ADCredentials {
                     # ErrorCode 49 means invalid credentials
                     Write-Verbose "Failed to connect to LDAP server with credentials provided"
                     $credentialsValid = $false
-                } elseif ($_.Exception.ErrorCode -eq 84) {
+                } elseif ($_.Exception.ErrorCode -eq 81) {
                     Write-Verbose "Failed to connect to LDAP server using UPN domain"
                     Test-ADCredentials -Credentials $Credentials -Domain $env:USERDNSDOMAIN
                 }
