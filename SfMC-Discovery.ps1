@@ -21,7 +21,7 @@
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE
 #>
-# Version 20240619.1355
+# Version 20240626.1047
 param(
     [Parameter(Mandatory=$true,HelpMessage="The ExchangeServer parameter specifies the Exchange server for the remote PowerShell session")] [string]$ExchangeServer,
     [Parameter(Mandatory=$false,HelpMessage="The Credential parameter specifies the Exchange administrator credentials used for data collection")] [pscredential]$Credential,
@@ -128,10 +128,10 @@ function Test-ADCredentials {
         }
         if ([System.String]::IsNullOrEmpty($domain)) {
             Write-Verbose "Domain is empty which could be an indicator that UPN was passed instead of domain\username"
-            $domain = ($Credentials.GetNetworkCredential().UserName).Split("@")
-            if ($domain.Count -eq 2) {
+            $username = $Credentials.GetNetworkCredential().UserName
+            if($username -match '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$') {
+                $domain = $username.Substring($username.IndexOf("@")+1)
                 Write-Verbose "Domain was extracted from UPN"
-                $domain = $domain[-1]
                 $usernameFormat = "upn"
             } else {
                 Write-Verbose "Failed to extract domain from UPN - seems that username was passed without domain and so cannot be validated"
@@ -877,9 +877,9 @@ $ExchangeOrgDiscovery = {
 }
 
 try{
-    $adDomain = (Get-ADDomain -ErrorAction Ignore).DistinguishedName
+    $ConfigContainer = (Get-ADRootDSE -Credential $Credential).configurationNamingContext
     try {
-        $exchContainer = Get-ADObject -LDAPFilter "(objectClass=msExchConfigurationContainer)" -SearchBase "CN=Services,CN=Configuration,$adDomain" -SearchScope OneLevel -ErrorAction Ignore
+        $exchContainer = Get-ADObject -LDAPFilter "(objectClass=msExchConfigurationContainer)" -SearchBase "CN=Services,$($ConfigContainer)" -SearchScope OneLevel -ErrorAction Ignore
         if(Get-ADObject -Filter "objectClass -eq 'msExchExchangeServer' -and name -eq '$($env:COMPUTERNAME)'" -SearchBase $exchContainer -SearchScope Subtree -ErrorAction Ignore) {
             Write-Host ([string]::Format("Found Exchange server with the name {0}.", $env:COMPUTERNAME))
             $IsExchangeServer = $true
